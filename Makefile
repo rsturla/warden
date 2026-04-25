@@ -56,6 +56,9 @@ test-short: ## Run tests, skip network-dependent
 test-e2e: build ## Run end-to-end tests
 	go test -tags=e2e ./e2e/...
 
+test-vsock: ## Run QEMU vsock integration test (needs KVM + vhost_vsock)
+	./test/vsock/run.sh
+
 ## --- Fuzz ---
 
 fuzz: ## Run all fuzz targets (FUZZ_TIME=30s)

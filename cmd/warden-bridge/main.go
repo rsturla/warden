@@ -3,15 +3,13 @@ package main
 import (
 	"context"
 	"flag"
-	"io"
 	"log/slog"
 	"net"
 	"os"
 	"os/signal"
-	"sync"
 	"syscall"
 
-	"github.com/mdlayher/vsock"
+	"github.com/rsturla/warden/internal/bridge"
 )
 
 func main() {
@@ -31,7 +29,13 @@ func main() {
 		slog.Error("listen failed", "error", err)
 		os.Exit(1)
 	}
-	defer l.Close()
+
+	dialer := &bridge.VsockDialer{
+		CID:  uint32(*vsockCID),
+		Port: uint32(*vsockPort),
+	}
+
+	b := bridge.New(l, dialer, logger)
 
 	slog.Info("warden-bridge starting",
 		"listen", *listenAddr,
@@ -39,36 +43,8 @@ func main() {
 		"vsock_port", *vsockPort,
 	)
 
-	go func() {
-		<-ctx.Done()
-		l.Close()
-	}()
-
-	for {
-		conn, err := l.Accept()
-		if err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			slog.Error("accept failed", "error", err)
-			continue
-		}
-		go bridge(conn, uint32(*vsockCID), uint32(*vsockPort))
+	if err := b.Serve(ctx); err != nil {
+		slog.Error("bridge error", "error", err)
+		os.Exit(1)
 	}
-}
-
-func bridge(tcpConn net.Conn, cid, port uint32) {
-	defer tcpConn.Close()
-
-	vsockConn, err := vsock.Dial(cid, port, nil)
-	if err != nil {
-		slog.Error("vsock dial failed", "cid", cid, "port", port, "error", err)
-		return
-	}
-	defer vsockConn.Close()
-
-	var wg sync.WaitGroup
-	wg.Go(func() { io.Copy(vsockConn, tcpConn) })
-	wg.Go(func() { io.Copy(tcpConn, vsockConn) })
-	wg.Wait()
 }

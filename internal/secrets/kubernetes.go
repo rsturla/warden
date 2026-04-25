@@ -26,7 +26,7 @@ func init() {
 }
 
 const (
-	k8sTokenPath     = "/var/run/secrets/kubernetes.io/serviceaccount/token"   // #nosec G101 -- standard k8s mount path, not credentials
+	k8sTokenPath     = "/var/run/secrets/kubernetes.io/serviceaccount/token" // #nosec G101 -- standard k8s mount path, not credentials
 	k8sCACertPath    = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 	k8sNamespacePath = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 )

@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"net"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
@@ -73,7 +74,7 @@ func NewAutoCA(certOutput string) (*CA, error) {
 
 	if certOutput != "" {
 		certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-		if err := os.WriteFile(certOutput, certPEM, 0o644); err != nil {
+		if err := os.WriteFile(filepath.Clean(certOutput), certPEM, 0o600); err != nil {
 			return nil, fmt.Errorf("writing CA cert to %s: %w", certOutput, err)
 		}
 	}
@@ -87,11 +88,11 @@ func NewAutoCA(certOutput string) (*CA, error) {
 }
 
 func NewExternalCA(certPath, keyPath string) (*CA, error) {
-	certPEM, err := os.ReadFile(certPath)
+	certPEM, err := os.ReadFile(filepath.Clean(certPath))
 	if err != nil {
 		return nil, fmt.Errorf("reading CA cert: %w", err)
 	}
-	keyPEM, err := os.ReadFile(keyPath)
+	keyPEM, err := os.ReadFile(filepath.Clean(keyPath))
 	if err != nil {
 		return nil, fmt.Errorf("reading CA key: %w", err)
 	}

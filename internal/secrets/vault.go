@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -43,7 +44,7 @@ type VaultConfig struct {
 
 type VaultSource struct {
 	client  *http.Client
-	address string
+	baseURL *url.URL
 	mount   string
 	prefix  string
 
@@ -54,7 +55,13 @@ type VaultSource struct {
 }
 
 func NewVaultSource(cfg VaultConfig) (*VaultSource, error) {
-	address := strings.TrimRight(cfg.Address, "/")
+	parsed, err := url.Parse(strings.TrimRight(cfg.Address, "/"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid vault address: %w", err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, fmt.Errorf("vault address must use http or https scheme, got %q", parsed.Scheme)
+	}
 
 	s := &VaultSource{
 		client: &http.Client{
@@ -65,7 +72,7 @@ func NewVaultSource(cfg VaultConfig) (*VaultSource, error) {
 				},
 			},
 		},
-		address: address,
+		baseURL: parsed,
 		mount:   cfg.Mount,
 		prefix:  cfg.Prefix,
 	}
@@ -100,8 +107,11 @@ func (s *VaultSource) Resolve(ctx context.Context, name string) (string, bool, e
 
 	path, key := splitVaultName(s.prefix + name)
 
-	url := fmt.Sprintf("%s/v1/%s/data/%s", s.address, s.mount, path)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	reqURL, err := url.JoinPath(s.baseURL.String(), "v1", s.mount, "data", path)
+	if err != nil {
+		return "", false, fmt.Errorf("vault URL: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, "GET", reqURL, nil)
 	if err != nil {
 		return "", false, fmt.Errorf("vault request: %w", err)
 	}
@@ -117,7 +127,7 @@ func (s *VaultSource) Resolve(ctx context.Context, name string) (string, bool, e
 		return "", false, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
 		return "", false, fmt.Errorf("vault: unexpected status %s", resp.Status)
 	}
 
@@ -182,21 +192,24 @@ func (s *VaultSource) kubernetesLogin(ctx context.Context) (string, time.Duratio
 	}
 
 	body := fmt.Sprintf(`{"jwt":%q,"role":%q}`, string(jwt), role)
-	url := fmt.Sprintf("%s/v1/auth/kubernetes/login", s.address)
-	req, err := http.NewRequestWithContext(ctx, "POST", url, strings.NewReader(body))
+	loginURL, err := url.JoinPath(s.baseURL.String(), "v1", "auth", "kubernetes", "login")
+	if err != nil {
+		return "", 0, fmt.Errorf("vault login URL: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, "POST", loginURL, strings.NewReader(body))
 	if err != nil {
 		return "", 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := s.client.Do(req)
+	resp, err := s.client.Do(req) // #nosec G704 -- URL constructed from admin-configured vault address validated at init
 	if err != nil {
 		return "", 0, fmt.Errorf("vault k8s login: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
 		return "", 0, fmt.Errorf("vault k8s login: unexpected status %s", resp.Status)
 	}
 

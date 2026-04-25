@@ -65,12 +65,12 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	reader := bufio.NewReader(tlsConn)
 
 	for {
-		tlsConn.SetReadDeadline(time.Now().Add(60 * time.Second))
+		_ = tlsConn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		req, err := http.ReadRequest(reader)
 		if err != nil {
 			return
 		}
-		tlsConn.SetReadDeadline(time.Time{})
+		_ = tlsConn.SetReadDeadline(time.Time{})
 
 		req.URL.Scheme = "https"
 		req.URL.Host = connectHost
@@ -172,7 +172,7 @@ func (p *Proxy) dialUpstream(ctx context.Context, host, port string) (net.Conn, 
 
 	tlsConn := tls.Client(tcpConn, tlsCfg)
 	if err := tlsConn.HandshakeContext(ctx); err != nil {
-		tcpConn.Close()
+		_ = tcpConn.Close()
 		return nil, err
 	}
 	return tlsConn, nil
@@ -190,5 +190,5 @@ func writeHTTPError(conn net.Conn, code int, msg string) {
 	}
 	resp.Header.Set("Content-Type", "application/json")
 	resp.Header.Set("Connection", "close")
-	resp.Write(conn) //nolint:errcheck // best-effort on raw conn
+	_ = resp.Write(conn)
 }

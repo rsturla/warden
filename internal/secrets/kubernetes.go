@@ -26,7 +26,7 @@ func init() {
 }
 
 const (
-	k8sTokenPath     = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	k8sTokenPath     = "/var/run/secrets/kubernetes.io/serviceaccount/token"   // #nosec G101 -- standard k8s mount path, not credentials
 	k8sCACertPath    = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 	k8sNamespacePath = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
 )
@@ -102,7 +102,7 @@ func (s *KubernetesSource) Resolve(ctx context.Context, name string) (string, bo
 		return "", false, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
 		return "", false, fmt.Errorf("k8s: unexpected status %s", resp.Status)
 	}
 

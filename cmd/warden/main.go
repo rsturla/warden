@@ -140,8 +140,14 @@ func run(configPath string, logger *slog.Logger) error {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
 
-	proxySrv := &http.Server{Handler: p}
-	healthHTTP := &http.Server{Handler: healthSrv.Handler()}
+	proxySrv := &http.Server{
+		Handler:           p,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	healthHTTP := &http.Server{
+		Handler:           healthSrv.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+	}
 
 	errCh := make(chan error, 2)
 

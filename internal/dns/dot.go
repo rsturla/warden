@@ -30,7 +30,7 @@ func NewDoTResolver(server string) *DoTResolver {
 				MinVersion: tls.VersionTLS12,
 			})
 			if err := tlsConn.HandshakeContext(ctx); err != nil {
-				conn.Close()
+				_ = conn.Close()
 				return nil, err
 			}
 			return tlsConn, nil

@@ -29,7 +29,7 @@ func New(listener net.Listener, dialer Dialer, logger *slog.Logger) *Bridge {
 func (b *Bridge) Serve(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
-		b.listener.Close()
+		_ = b.listener.Close()
 	}()
 
 	for {
@@ -57,15 +57,15 @@ func (b *Bridge) handle(ctx context.Context, clientConn net.Conn) {
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
-		io.Copy(upstreamConn, clientConn)
+		_, _ = io.Copy(upstreamConn, clientConn)
 		if tc, ok := upstreamConn.(*net.TCPConn); ok {
-			tc.CloseWrite()
+			_ = tc.CloseWrite()
 		}
 	})
 	wg.Go(func() {
-		io.Copy(clientConn, upstreamConn)
+		_, _ = io.Copy(clientConn, upstreamConn)
 		if tc, ok := clientConn.(*net.TCPConn); ok {
-			tc.CloseWrite()
+			_ = tc.CloseWrite()
 		}
 	})
 	wg.Wait()

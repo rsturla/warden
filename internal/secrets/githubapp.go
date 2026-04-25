@@ -133,7 +133,7 @@ func (s *GitHubAppSource) getInstallationToken(ctx context.Context) (string, err
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
 		return "", fmt.Errorf("token exchange: unexpected status %s", resp.Status)
 	}
 

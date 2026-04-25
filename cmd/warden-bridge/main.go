@@ -31,9 +31,16 @@ func main() {
 	}
 	defer l.Close()
 
+	const maxUint32 = 1<<32 - 1
+	if *vsockCID > maxUint32 || *vsockPort > maxUint32 {
+		slog.Error("vsock CID and port must fit in uint32")
+		os.Exit(1)
+	}
+	cid := uint32(*vsockCID)   // #nosec G115 -- bounds checked above
+	port := uint32(*vsockPort) // #nosec G115 -- bounds checked above
 	dialer := &bridge.VsockDialer{
-		CID:  uint32(*vsockCID),
-		Port: uint32(*vsockPort),
+		CID:  cid,
+		Port: port,
 	}
 
 	b := bridge.New(l, dialer, logger)

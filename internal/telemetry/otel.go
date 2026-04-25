@@ -102,7 +102,11 @@ func (e *OTELExporter) LogRequest(ctx context.Context, entry RequestLog) error {
 	e.recordRequestMetrics(entry)
 
 	if needsFlush {
-		go e.flush(context.Background())
+		go func() {
+			flushCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			_ = e.flush(flushCtx)
+		}()
 	}
 
 	return nil
@@ -185,7 +189,7 @@ func (e *OTELExporter) flushLoop() {
 	for {
 		select {
 		case <-ticker.C:
-			e.flush(context.Background())
+			_ = e.flush(context.Background())
 		case <-e.done:
 			return
 		}
@@ -302,7 +306,7 @@ func (e *OTELExporter) post(ctx context.Context, url string, payload any) error 
 	if err != nil {
 		return fmt.Errorf("OTLP export: %w", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
 	if resp.StatusCode >= 400 {
 		return fmt.Errorf("OTLP export: %s", resp.Status)

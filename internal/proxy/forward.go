@@ -69,8 +69,8 @@ func (p *Proxy) handleForward(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	http.NewResponseController(w).Flush()
-	copyBody(w, resp.Body) //nolint:errcheck // headers already sent, response is best-effort
+	_ = http.NewResponseController(w).Flush()
+	_ = copyBody(w, resp.Body)
 
 	p.logAllow(ctx, r, decision, injectResult, resp.StatusCode, start)
 }
@@ -92,7 +92,7 @@ func (p *Proxy) logAllow(ctx context.Context, r *http.Request, d *policy.PolicyD
 	if inj != nil {
 		entry.InjectedSecrets = inj.InjectedSecretNames
 	}
-	p.telemetry.LogRequest(ctx, entry)
+	_ = p.telemetry.LogRequest(ctx, entry)
 }
 
 func (p *Proxy) logDeny(ctx context.Context, r *http.Request, d *policy.PolicyDecision, start time.Time) {
@@ -103,7 +103,7 @@ func (p *Proxy) logDeny(ctx context.Context, r *http.Request, d *policy.PolicyDe
 	if reason == "" {
 		reason = "no_match"
 	}
-	p.telemetry.LogRequest(ctx, telemetry.RequestLog{
+	_ = p.telemetry.LogRequest(ctx, telemetry.RequestLog{
 		ClientIP:   clientIP(r),
 		Host:       requestHost(r),
 		Method:     r.Method,
@@ -118,7 +118,7 @@ func (p *Proxy) logDeny(ctx context.Context, r *http.Request, d *policy.PolicyDe
 func (p *Proxy) writeError(w http.ResponseWriter, code int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
+	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
 }
 
 func denyMessage(d *policy.PolicyDecision) string {

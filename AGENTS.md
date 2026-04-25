@@ -20,7 +20,7 @@ make deps-update  # update all deps to latest
 
 ## Module
 
-`github.com/rsturla/warden` — 3 external deps (`go.yaml.in/yaml/v3`, `github.com/mdlayher/vsock`, `golang.org/x/sync`). Everything else is stdlib.
+`github.com/rsturla/warden` — 3 external deps (`go.yaml.in/yaml/v3`, `github.com/mdlayher/vsock`, `golang.org/x/sync`). Rest stdlib.
 
 ## Project Structure
 
@@ -43,7 +43,7 @@ internal/
 
 ## Key Interfaces
 
-All interfaces take `context.Context` as first parameter.
+All interfaces take `context.Context` first param.
 
 **PolicyEngine** (`internal/policy/types.go`):
 - `Evaluate(ctx, *RequestContext) (*PolicyDecision, error)` — first-match-wins, default-deny
@@ -66,20 +66,20 @@ All interfaces take `context.Context` as first parameter.
 
 ## Code Conventions
 
-- **All interactions through Make** — never run `go` commands directly
+- **All interactions through Make** — never run `go` commands direct
 - **log/slog** for all logging — `slog.NewJSONHandler(os.Stdout, nil)`
 - **Default-deny** — no matching policy = 403 Forbidden
 - **Fail-closed** — secret resolution failure = 403, not forward without auth
-- **No comments unless WHY is non-obvious** — code should be self-documenting
-- **Errors**: return as last value, wrap with `fmt.Errorf("context: %w", err)` at boundaries
+- **No comments unless WHY non-obvious** — self-documenting code
+- **Errors**: return last value, wrap with `fmt.Errorf("context: %w", err)` at boundaries
 - **No panics** in library code
-- **ECDSA P-256** for all generated keys — `PrivateKey.Bytes()` not big.Int fields (deprecated in Go 1.25)
+- **ECDSA P-256** for all generated keys — `PrivateKey.Bytes()` not big.Int fields (deprecated Go 1.25)
 - **os.Root** for file access — prevents path traversal by design
 - **net/http ServeMux patterns** (`GET /healthz`) for routing
 
 ## Testing
 
-- Every package has `_test.go` files — unit, integration, and fuzz
+- Every package has `_test.go` files — unit, integration, fuzz
 - **Fuzz targets** on all input-parsing surfaces (10 targets): globs, templates, config, certs, IPs, headers, requests
 - **Race detector** required in CI (`make test-race`)
 - **Benchmarks** on policy eval (~118ns/op), CA cert gen, DNS, secret resolution

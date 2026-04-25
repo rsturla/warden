@@ -69,9 +69,8 @@ func (p *Proxy) handleForward(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	// Use io.Copy for streaming
 	http.NewResponseController(w).Flush()
-	copyBody(w, resp.Body)
+	copyBody(w, resp.Body) //nolint:errcheck // headers already sent, response is best-effort
 
 	p.logAllow(ctx, r, decision, injectResult, resp.StatusCode, start)
 }

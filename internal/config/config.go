@@ -151,6 +151,7 @@ func (c *Config) applyDefaults() {
 		if c.Policies[i].Path == "" {
 			c.Policies[i].Path = "/**"
 		}
+		c.Policies[i].Action = strings.ToLower(c.Policies[i].Action)
 	}
 }
 

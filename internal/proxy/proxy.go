@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 	"net/http"
 	"time"
@@ -15,7 +16,7 @@ import (
 )
 
 type Proxy struct {
-	ca        *wardenca.CA
+	ca        wardenca.CertProvider
 	policy    policy.PolicyEngine
 	secrets   *secrets.Chain
 	resolver  wardendns.Resolver
@@ -25,7 +26,7 @@ type Proxy struct {
 }
 
 type Config struct {
-	CA        *wardenca.CA
+	CA        wardenca.CertProvider
 	Policy    policy.PolicyEngine
 	Secrets   *secrets.Chain
 	Resolver  wardendns.Resolver
@@ -74,6 +75,9 @@ func (p *Proxy) dialWithDNS(ctx context.Context, network, addr string) (net.Conn
 	ips, err := p.resolver.Resolve(ctx, host)
 	if err != nil {
 		return nil, err
+	}
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("no addresses resolved for %s", host)
 	}
 
 	if err := p.denylist.Check(host, ips); err != nil {

@@ -2,13 +2,14 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/rsturla/warden/internal/inject"
@@ -64,10 +65,12 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 	reader := bufio.NewReader(tlsConn)
 
 	for {
+		tlsConn.SetReadDeadline(time.Now().Add(60 * time.Second))
 		req, err := http.ReadRequest(reader)
 		if err != nil {
 			return
 		}
+		tlsConn.SetReadDeadline(time.Time{})
 
 		req.URL.Scheme = "https"
 		req.URL.Host = connectHost
@@ -145,6 +148,9 @@ func (p *Proxy) dialUpstream(ctx context.Context, host, port string) (net.Conn, 
 	if err != nil {
 		return nil, err
 	}
+	if len(ips) == 0 {
+		return nil, fmt.Errorf("no addresses resolved for %s", host)
+	}
 	if err := p.denylist.Check(host, ips); err != nil {
 		return nil, err
 	}
@@ -173,16 +179,16 @@ func (p *Proxy) dialUpstream(ctx context.Context, host, port string) (net.Conn, 
 }
 
 func writeHTTPError(conn net.Conn, code int, msg string) {
+	body, _ := json.Marshal(map[string]string{"error": msg})
 	resp := &http.Response{
-		StatusCode: code,
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Header:     make(http.Header),
-		Body: io.NopCloser(
-			strings.NewReader(fmt.Sprintf(`{"error":"%s"}`, msg)),
-		),
+		StatusCode:    code,
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Header:        make(http.Header),
+		ContentLength: int64(len(body)),
+		Body:          io.NopCloser(bytes.NewReader(body)),
 	}
 	resp.Header.Set("Content-Type", "application/json")
 	resp.Header.Set("Connection", "close")
-	resp.Write(conn)
+	resp.Write(conn) //nolint:errcheck // best-effort on raw conn
 }

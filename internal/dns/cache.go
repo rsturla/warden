@@ -8,12 +8,15 @@ import (
 	"time"
 )
 
+const defaultMaxCacheEntries = 4096
+
 type CachingResolver struct {
-	upstream  Resolver
-	maxTTL    time.Duration
-	mu        sync.RWMutex
-	entries   map[string]*cacheEntry
-	cacheHits atomic.Int64
+	upstream   Resolver
+	maxTTL     time.Duration
+	maxEntries int
+	mu         sync.RWMutex
+	entries    map[string]*cacheEntry
+	cacheHits  atomic.Int64
 }
 
 type cacheEntry struct {
@@ -23,9 +26,10 @@ type cacheEntry struct {
 
 func NewCachingResolver(upstream Resolver, maxTTL time.Duration) *CachingResolver {
 	return &CachingResolver{
-		upstream: upstream,
-		maxTTL:   maxTTL,
-		entries:  make(map[string]*cacheEntry),
+		upstream:   upstream,
+		maxTTL:     maxTTL,
+		maxEntries: defaultMaxCacheEntries,
+		entries:    make(map[string]*cacheEntry),
 	}
 }
 
@@ -44,6 +48,12 @@ func (r *CachingResolver) Resolve(ctx context.Context, host string) ([]net.IP, e
 	}
 
 	r.mu.Lock()
+	if len(r.entries) >= r.maxEntries {
+		r.evictExpired()
+		if len(r.entries) >= r.maxEntries {
+			clear(r.entries)
+		}
+	}
 	r.entries[host] = &cacheEntry{
 		ips:     ips,
 		expires: time.Now().Add(r.maxTTL),
@@ -51,6 +61,16 @@ func (r *CachingResolver) Resolve(ctx context.Context, host string) ([]net.IP, e
 	r.mu.Unlock()
 
 	return ips, nil
+}
+
+// evictExpired removes expired entries. Must be called with write lock held.
+func (r *CachingResolver) evictExpired() {
+	now := time.Now()
+	for k, e := range r.entries {
+		if now.After(e.expires) {
+			delete(r.entries, k)
+		}
+	}
 }
 
 func (r *CachingResolver) CacheHits() int64 {

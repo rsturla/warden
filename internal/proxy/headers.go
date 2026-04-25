@@ -23,6 +23,7 @@ func removeHopByHopHeaders(h http.Header) {
 	}
 }
 
-func copyBody(dst io.Writer, src io.Reader) {
-	io.Copy(dst, src)
+func copyBody(dst io.Writer, src io.Reader) error {
+	_, err := io.Copy(dst, src)
+	return err
 }

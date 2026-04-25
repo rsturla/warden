@@ -16,6 +16,10 @@ import (
 	"time"
 )
 
+type CertProvider interface {
+	GetOrCreateCert(host string) (*tls.Certificate, error)
+}
+
 type CA struct {
 	cert    *x509.Certificate
 	key     *ecdsa.PrivateKey

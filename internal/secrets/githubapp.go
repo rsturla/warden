@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
@@ -17,7 +18,19 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rsturla/warden/internal/config"
 )
+
+func init() {
+	Register("github-app", func(cfg config.SecretConfig) (SecretSource, error) {
+		return NewGitHubAppSource(GitHubAppConfig{
+			AppID:          cfg.GitHubApp.AppID,
+			InstallationID: cfg.GitHubApp.InstallationID,
+			PrivateKeyPath: cfg.GitHubApp.PrivateKeyPath,
+		})
+	})
+}
 
 type GitHubAppConfig struct {
 	AppID          int64
@@ -58,8 +71,15 @@ func NewGitHubAppSource(cfg GitHubAppConfig) (*GitHubAppSource, error) {
 		appID:          cfg.AppID,
 		installationID: cfg.InstallationID,
 		key:            key,
-		client:         &http.Client{Timeout: 10 * time.Second},
-		apiBase:        strings.TrimRight(apiBase, "/"),
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					MinVersion: tls.VersionTLS12,
+				},
+			},
+		},
+		apiBase: strings.TrimRight(apiBase, "/"),
 	}, nil
 }
 
@@ -113,8 +133,8 @@ func (s *GitHubAppSource) getInstallationToken(ctx context.Context) (string, err
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return "", fmt.Errorf("token exchange: %s: %s", resp.Status, body)
+		io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+		return "", fmt.Errorf("token exchange: unexpected status %s", resp.Status)
 	}
 
 	var result struct {

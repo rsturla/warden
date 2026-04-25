@@ -3,7 +3,15 @@ package secrets
 import (
 	"context"
 	"os"
+
+	"github.com/rsturla/warden/internal/config"
 )
+
+func init() {
+	Register("env", func(_ config.SecretConfig) (SecretSource, error) {
+		return NewEnvSource(), nil
+	})
+}
 
 type EnvSource struct{}
 

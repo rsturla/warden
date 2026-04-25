@@ -3,6 +3,8 @@ package policy
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"path"
 
 	"github.com/rsturla/warden/internal/config"
 )
@@ -60,12 +62,28 @@ func NewYAMLPolicyEngine(rules []config.PolicyRule) (*YAMLPolicyEngine, error) {
 	return &YAMLPolicyEngine{rules: compiled}, nil
 }
 
+func normalizePath(p string) string {
+	if unescaped, err := url.PathUnescape(p); err == nil {
+		p = unescaped
+	}
+	p = path.Clean(p)
+	if p == "." {
+		return "/"
+	}
+	if p[0] != '/' {
+		p = "/" + p
+	}
+	return p
+}
+
 func (e *YAMLPolicyEngine) Evaluate(_ context.Context, req *RequestContext) (*PolicyDecision, error) {
+	cleanPath := normalizePath(req.Path)
+
 	for _, rule := range e.rules {
 		if !rule.hostMatch(req.Host) {
 			continue
 		}
-		if !rule.pathMatch(req.Path) {
+		if !rule.pathMatch(cleanPath) {
 			continue
 		}
 		if rule.methods != nil && !rule.methods[req.Method] {
@@ -99,4 +117,8 @@ func (e *YAMLPolicyEngine) CanMatchHost(host string) bool {
 		}
 	}
 	return false
+}
+
+func NewEngine(rules []config.PolicyRule) (PolicyEngine, error) {
+	return NewYAMLPolicyEngine(rules)
 }

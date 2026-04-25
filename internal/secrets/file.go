@@ -6,7 +6,15 @@ import (
 	"io/fs"
 	"os"
 	"strings"
+
+	"github.com/rsturla/warden/internal/config"
 )
+
+func init() {
+	Register("file", func(cfg config.SecretConfig) (SecretSource, error) {
+		return NewFileSource(cfg.File.Path)
+	})
+}
 
 type FileSource struct {
 	root *os.Root

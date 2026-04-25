@@ -2,6 +2,7 @@ package secrets
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,7 +11,28 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/rsturla/warden/internal/config"
 )
+
+func init() {
+	Register("vault", func(cfg config.SecretConfig) (SecretSource, error) {
+		mount := cfg.Vault.Mount
+		if mount == "" {
+			mount = "secret"
+		}
+		auth := cfg.Vault.Auth
+		if auth == "" {
+			auth = "token"
+		}
+		return NewVaultSource(VaultConfig{
+			Address: cfg.Vault.Address,
+			Mount:   mount,
+			Prefix:  cfg.Vault.Prefix,
+			Auth:    auth,
+		})
+	})
+}
 
 type VaultConfig struct {
 	Address string
@@ -35,7 +57,14 @@ func NewVaultSource(cfg VaultConfig) (*VaultSource, error) {
 	address := strings.TrimRight(cfg.Address, "/")
 
 	s := &VaultSource{
-		client:  &http.Client{Timeout: 10 * time.Second},
+		client: &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{
+					MinVersion: tls.VersionTLS12,
+				},
+			},
+		},
 		address: address,
 		mount:   cfg.Mount,
 		prefix:  cfg.Prefix,
@@ -88,8 +117,8 @@ func (s *VaultSource) Resolve(ctx context.Context, name string) (string, bool, e
 		return "", false, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return "", false, fmt.Errorf("vault: %s: %s", resp.Status, body)
+		io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+		return "", false, fmt.Errorf("vault: unexpected status %s", resp.Status)
 	}
 
 	var result struct {
@@ -167,8 +196,8 @@ func (s *VaultSource) kubernetesLogin(ctx context.Context) (string, time.Duratio
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return "", 0, fmt.Errorf("vault k8s login: %s: %s", resp.Status, respBody)
+		io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+		return "", 0, fmt.Errorf("vault k8s login: unexpected status %s", resp.Status)
 	}
 
 	var result struct {

@@ -13,7 +13,17 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/rsturla/warden/internal/config"
 )
+
+func init() {
+	Register("kubernetes", func(cfg config.SecretConfig) (SecretSource, error) {
+		return NewKubernetesSource(K8sConfig{
+			Namespace: cfg.Kubernetes.Namespace,
+		})
+	})
+}
 
 const (
 	k8sTokenPath     = "/var/run/secrets/kubernetes.io/serviceaccount/token"
@@ -92,8 +102,8 @@ func (s *KubernetesSource) Resolve(ctx context.Context, name string) (string, bo
 		return "", false, nil
 	}
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-		return "", false, fmt.Errorf("k8s: %s: %s", resp.Status, body)
+		io.Copy(io.Discard, io.LimitReader(resp.Body, 1024))
+		return "", false, fmt.Errorf("k8s: unexpected status %s", resp.Status)
 	}
 
 	var result struct {
@@ -127,7 +137,7 @@ func splitK8sName(name string) (string, string) {
 func buildK8sClient() (*http.Client, error) {
 	caCert, err := os.ReadFile(k8sCACertPath)
 	if err != nil {
-		return &http.Client{Timeout: 10 * time.Second}, nil
+		return nil, fmt.Errorf("reading k8s CA cert %s: %w", k8sCACertPath, err)
 	}
 
 	pool := x509.NewCertPool()

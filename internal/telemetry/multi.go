@@ -1,6 +1,9 @@
 package telemetry
 
-import "context"
+import (
+	"context"
+	"errors"
+)
 
 type MultiExporter struct {
 	exporters []TelemetryExporter
@@ -36,12 +39,13 @@ func (m *MultiExporter) RecordMetric(ctx context.Context, name string, value flo
 }
 
 func (m *MultiExporter) Close(ctx context.Context) error {
+	var errs []error
 	for _, e := range m.exporters {
 		if err := e.Close(ctx); err != nil {
-			return err
+			errs = append(errs, err)
 		}
 	}
-	return nil
+	return errors.Join(errs...)
 }
 
 type multiSpanHandle struct {

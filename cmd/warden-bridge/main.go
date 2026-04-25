@@ -29,6 +29,7 @@ func main() {
 		slog.Error("listen failed", "error", err)
 		os.Exit(1)
 	}
+	defer l.Close()
 
 	dialer := &bridge.VsockDialer{
 		CID:  uint32(*vsockCID),

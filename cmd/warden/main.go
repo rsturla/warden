@@ -50,7 +50,7 @@ func run(configPath string, logger *slog.Logger) error {
 	}
 
 	// CA
-	var wardenCA *ca.CA
+	var wardenCA ca.CertProvider
 	if cfg.CA.Cert != "" && cfg.CA.Key != "" {
 		wardenCA, err = ca.NewExternalCA(cfg.CA.Cert, cfg.CA.Key)
 	} else {
@@ -63,53 +63,11 @@ func run(configPath string, logger *slog.Logger) error {
 	// Secrets
 	var sources []secrets.SecretSource
 	for _, s := range cfg.Secrets {
-		switch s.Type {
-		case "env":
-			sources = append(sources, secrets.NewEnvSource())
-		case "file":
-			fs, err := secrets.NewFileSource(s.File.Path)
-			if err != nil {
-				return err
-			}
-			sources = append(sources, fs)
-		case "vault":
-			mount := s.Vault.Mount
-			if mount == "" {
-				mount = "secret"
-			}
-			auth := s.Vault.Auth
-			if auth == "" {
-				auth = "token"
-			}
-			vs, err := secrets.NewVaultSource(secrets.VaultConfig{
-				Address: s.Vault.Address,
-				Mount:   mount,
-				Prefix:  s.Vault.Prefix,
-				Auth:    auth,
-			})
-			if err != nil {
-				return err
-			}
-			sources = append(sources, vs)
-		case "kubernetes":
-			ks, err := secrets.NewKubernetesSource(secrets.K8sConfig{
-				Namespace: s.Kubernetes.Namespace,
-			})
-			if err != nil {
-				return err
-			}
-			sources = append(sources, ks)
-		case "github-app":
-			gs, err := secrets.NewGitHubAppSource(secrets.GitHubAppConfig{
-				AppID:          s.GitHubApp.AppID,
-				InstallationID: s.GitHubApp.InstallationID,
-				PrivateKeyPath: s.GitHubApp.PrivateKeyPath,
-			})
-			if err != nil {
-				return err
-			}
-			sources = append(sources, gs)
+		src, err := secrets.Build(s)
+		if err != nil {
+			return err
 		}
+		sources = append(sources, src)
 	}
 	chain := secrets.NewChain(sources...)
 
@@ -131,7 +89,7 @@ func run(configPath string, logger *slog.Logger) error {
 	}
 
 	// Policy
-	engine, err := policy.NewYAMLPolicyEngine(cfg.Policies)
+	engine, err := policy.NewEngine(cfg.Policies)
 	if err != nil {
 		return err
 	}
@@ -204,9 +162,15 @@ func run(configPath string, logger *slog.Logger) error {
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer shutdownCancel()
 
-	proxySrv.Shutdown(shutdownCtx)
-	healthHTTP.Shutdown(shutdownCtx)
-	exporter.Close(shutdownCtx)
+	if err := proxySrv.Shutdown(shutdownCtx); err != nil {
+		logger.Error("proxy shutdown error", "error", err)
+	}
+	if err := healthHTTP.Shutdown(shutdownCtx); err != nil {
+		logger.Error("health shutdown error", "error", err)
+	}
+	if err := exporter.Close(shutdownCtx); err != nil {
+		logger.Error("telemetry close error", "error", err)
+	}
 
 	return nil
 }

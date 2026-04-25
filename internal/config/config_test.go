@@ -270,3 +270,77 @@ func TestParseInvalidYAML(t *testing.T) {
 		t.Fatal("expected error for invalid YAML")
 	}
 }
+
+func TestLoadFileNotFound(t *testing.T) {
+	_, err := Load("/nonexistent/path/config.yaml")
+	if err == nil {
+		t.Fatal("expected error for missing file")
+	}
+}
+
+func TestLoadValidFile(t *testing.T) {
+	cfg, err := Load("../../config.example.yaml")
+	if err != nil {
+		t.Fatalf("failed to load example config: %v", err)
+	}
+	if len(cfg.Policies) == 0 {
+		t.Error("expected policies in example config")
+	}
+}
+
+func TestValidateMixedCaseAction(t *testing.T) {
+	data := []byte(`
+policies:
+  - name: test
+    host: "example.com"
+    action: Allow
+`)
+	_, err := Parse(data)
+	if err != nil {
+		t.Fatalf("mixed case action should be accepted: %v", err)
+	}
+}
+
+func TestValidateIPv6CIDR(t *testing.T) {
+	data := []byte(`
+dns:
+  deny_resolved_ips:
+    - "::1/128"
+    - "fe80::/10"
+policies: []
+`)
+	_, err := Parse(data)
+	if err != nil {
+		t.Fatalf("IPv6 CIDRs should be valid: %v", err)
+	}
+}
+
+func TestValidateSpecialCharsInPolicyName(t *testing.T) {
+	data := []byte(`
+policies:
+  - name: "allow-github.com/repos"
+    host: "api.github.com"
+    action: allow
+`)
+	_, err := Parse(data)
+	if err != nil {
+		t.Fatalf("special chars in policy name should be valid: %v", err)
+	}
+}
+
+func TestValidateEmptyMethodsList(t *testing.T) {
+	data := []byte(`
+policies:
+  - name: test
+    host: "example.com"
+    methods: []
+    action: allow
+`)
+	cfg, err := Parse(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Policies[0].Methods) != 0 {
+		t.Error("empty methods should remain empty (match all)")
+	}
+}

@@ -79,6 +79,36 @@ func TestDenylistEmpty(t *testing.T) {
 	}
 }
 
+func TestDenylistCIDRBoundary(t *testing.T) {
+	d, _ := NewDenylist([]string{"10.0.0.0/8"})
+
+	boundary := []struct {
+		ip      string
+		blocked bool
+	}{
+		{"10.0.0.0", true},
+		{"10.255.255.255", true},
+		{"9.255.255.255", false},
+		{"11.0.0.0", false},
+	}
+	for _, tt := range boundary {
+		err := d.Check("test", []net.IP{net.ParseIP(tt.ip)})
+		if (err != nil) != tt.blocked {
+			t.Errorf("%s: blocked=%v, want %v", tt.ip, err != nil, tt.blocked)
+		}
+	}
+}
+
+func TestDenylistIPv4MappedIPv6(t *testing.T) {
+	d, _ := NewDenylist([]string{"10.0.0.0/8"})
+	// ::ffff:10.0.0.1 is IPv4-mapped IPv6 for 10.0.0.1
+	ip := net.ParseIP("::ffff:10.0.0.1")
+	err := d.Check("test", []net.IP{ip})
+	if err == nil {
+		t.Error("IPv4-mapped IPv6 10.0.0.1 should be blocked")
+	}
+}
+
 func TestDenylistInvalidCIDR(t *testing.T) {
 	_, err := NewDenylist([]string{"not-a-cidr"})
 	if err == nil {

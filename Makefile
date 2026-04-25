@@ -5,6 +5,7 @@ WARDEN_BIN    := bin/warden
 BRIDGE_BIN    := bin/warden-bridge
 CONFIG        ?= config.example.yaml
 FUZZ_TIME     ?= 30s
+FUZZ_PARALLEL ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 COVER_PROFILE := coverage.out
 
 all: deps lint test build ## Full pipeline: deps → lint → test → build
@@ -45,16 +46,16 @@ test-e2e: build ## Run end-to-end tests
 ## --- Fuzz ---
 
 fuzz: ## Run all fuzz targets (FUZZ_TIME=30s)
-	go test -fuzz=FuzzCompilePathGlob -fuzztime=$(FUZZ_TIME) ./internal/policy/
-	go test -fuzz=FuzzPathMatch -fuzztime=$(FUZZ_TIME) ./internal/policy/
-	go test -fuzz=FuzzCompileHostGlob -fuzztime=$(FUZZ_TIME) ./internal/policy/
-	go test -fuzz=FuzzHostMatch -fuzztime=$(FUZZ_TIME) ./internal/policy/
-	go test -fuzz=FuzzConfigParse -fuzztime=$(FUZZ_TIME) ./internal/config/
-	go test -fuzz=FuzzResolveTemplate -fuzztime=$(FUZZ_TIME) ./internal/secrets/
-	go test -fuzz=FuzzGetOrCreateCert -fuzztime=$(FUZZ_TIME) ./internal/ca/
-	go test -fuzz=FuzzDenylistCheck -fuzztime=$(FUZZ_TIME) ./internal/dns/
-	go test -fuzz=FuzzInjectHeaders -fuzztime=$(FUZZ_TIME) ./internal/inject/
-	go test -fuzz=FuzzProxyRequest -fuzztime=$(FUZZ_TIME) ./internal/proxy/
+	go test -fuzz=FuzzCompilePathGlob -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/policy/
+	go test -fuzz=FuzzPathMatch -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/policy/
+	go test -fuzz=FuzzCompileHostGlob -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/policy/
+	go test -fuzz=FuzzHostMatch -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/policy/
+	go test -fuzz=FuzzConfigParse -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/config/
+	go test -fuzz=FuzzResolveTemplate -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/secrets/
+	go test -fuzz=FuzzGetOrCreateCert -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/ca/
+	go test -fuzz=FuzzDenylistCheck -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/dns/
+	go test -fuzz=FuzzInjectHeaders -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/inject/
+	go test -fuzz=FuzzProxyRequest -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/proxy/
 
 ## --- Quality ---
 

@@ -117,6 +117,48 @@ func TestCompilePathGlob(t *testing.T) {
 	}
 }
 
+func TestCompilePathGlobEdgeCases(t *testing.T) {
+	tests := []struct {
+		pattern string
+		path    string
+		want    bool
+	}{
+		// Trailing slash
+		{"/api/", "/api/", true},
+		{"/api", "/api/", false},
+
+		// Root path
+		{"/**", "/", true},
+		{"/", "/", true},
+		{"/", "/foo", false},
+
+		// Double wildcard at different positions
+		{"/**/comments", "/repos/org/issues/123/comments", true},
+		{"/**/comments", "/comments", true},
+		{"/a/**/z", "/a/z", true},
+		{"/a/**/z", "/a/b/c/z", true},
+
+		// Empty path
+		{"/**", "", true},
+
+		// Wildcard only
+		{"/*", "/foo", true},
+		{"/*", "/", false},
+	}
+
+	for _, tt := range tests {
+		fn, err := CompilePathGlob(tt.pattern)
+		if err != nil {
+			t.Errorf("CompilePathGlob(%q): %v", tt.pattern, err)
+			continue
+		}
+		got := fn(tt.path)
+		if got != tt.want {
+			t.Errorf("pattern=%q path=%q: got %v, want %v", tt.pattern, tt.path, got, tt.want)
+		}
+	}
+}
+
 func TestCompilePathGlobErrors(t *testing.T) {
 	_, err := CompilePathGlob("")
 	if err == nil {

@@ -2,11 +2,20 @@ package dns
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync/atomic"
 	"testing"
 	"time"
 )
+
+type errorResolver struct {
+	err error
+}
+
+func (r *errorResolver) Resolve(_ context.Context, _ string) ([]net.IP, error) {
+	return nil, r.err
+}
 
 type countingResolver struct {
 	calls atomic.Int64
@@ -46,6 +55,16 @@ func TestCachingResolverExpiry(t *testing.T) {
 
 	if upstream.calls.Load() != 2 {
 		t.Errorf("upstream called %d times, want 2 (after expiry)", upstream.calls.Load())
+	}
+}
+
+func TestCachingResolverUpstreamError(t *testing.T) {
+	upstream := &errorResolver{err: fmt.Errorf("dns failure")}
+	cache := NewCachingResolver(upstream, time.Minute)
+
+	_, err := cache.Resolve(context.Background(), "fail.example.com")
+	if err == nil {
+		t.Error("expected error from upstream")
 	}
 }
 

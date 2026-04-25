@@ -224,3 +224,44 @@ func TestMultiplePoliciesFullFlow(t *testing.T) {
 		})
 	}
 }
+
+func TestCanMatchHost(t *testing.T) {
+	e := testEngine(t, []config.PolicyRule{
+		{Name: "deny-meta", Host: "169.254.169.254", Path: "/**", Action: "deny"},
+		{Name: "allow-github", Host: "api.github.com", Path: "/**", Action: "allow"},
+		{Name: "allow-wildcard", Host: "*.example.com", Path: "/**", Action: "allow"},
+	})
+
+	tests := []struct {
+		host string
+		want bool
+	}{
+		{"api.github.com", true},
+		{"sub.example.com", true},
+		{"169.254.169.254", false}, // only deny rule
+		{"evil.com", false},
+		{"example.com", false}, // *.example.com doesn't match bare
+	}
+	for _, tt := range tests {
+		got := e.CanMatchHost(tt.host)
+		if got != tt.want {
+			t.Errorf("CanMatchHost(%q) = %v, want %v", tt.host, got, tt.want)
+		}
+	}
+}
+
+func TestCanMatchHostNoPolicies(t *testing.T) {
+	e := testEngine(t, nil)
+	if e.CanMatchHost("anything.com") {
+		t.Error("empty engine should never match")
+	}
+}
+
+func TestCanMatchHostOnlyDeny(t *testing.T) {
+	e := testEngine(t, []config.PolicyRule{
+		{Name: "deny-all", Host: "example.com", Path: "/**", Action: "deny"},
+	})
+	if e.CanMatchHost("example.com") {
+		t.Error("deny-only should not match for CanMatchHost")
+	}
+}

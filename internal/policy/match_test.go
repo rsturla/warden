@@ -17,8 +17,8 @@ func TestCompileHostGlob(t *testing.T) {
 		// Wildcard subdomain
 		{"*.example.com", "api.example.com", true},
 		{"*.example.com", "www.example.com", true},
-		{"*.example.com", "ADMIN.EXAMPLE.COM", true}, // case insensitive
-		{"*.example.com", "example.com", false},       // no subdomain
+		{"*.example.com", "ADMIN.EXAMPLE.COM", true},    // case insensitive
+		{"*.example.com", "example.com", false},         // no subdomain
 		{"*.example.com", "sub.api.example.com", false}, // nested subdomain
 
 		// Wildcard with multiple levels
@@ -80,7 +80,7 @@ func TestCompilePathGlob(t *testing.T) {
 		{"/repos/*/pulls", "/repos/myorg/pulls", true},
 		{"/repos/*/pulls", "/repos/other/pulls", true},
 		{"/repos/*/pulls", "/repos/myorg/sub/pulls", false}, // * = one segment
-		{"/repos/*/pulls", "/repos/pulls", false},            // missing segment
+		{"/repos/*/pulls", "/repos/pulls", false},           // missing segment
 
 		// Double wildcard
 		{"/repos/**", "/repos/a", true},

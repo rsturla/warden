@@ -74,6 +74,11 @@ func (e *collectExporter) LogRequest(_ context.Context, entry telemetry.RequestL
 	e.entries = append(e.entries, entry)
 	return nil
 }
+func (e *collectExporter) StartSpan(ctx context.Context, _ string, _ ...telemetry.SpanAttr) (context.Context, telemetry.SpanHandle) {
+	return ctx, telemetry.NoopSpan{}
+}
+func (e *collectExporter) RecordMetric(_ context.Context, _ string, _ float64, _ ...telemetry.MetricAttr) {
+}
 func (e *collectExporter) Close(_ context.Context) error { return nil }
 func (e *collectExporter) getEntries() []telemetry.RequestLog {
 	e.mu.Lock()
@@ -270,8 +275,8 @@ func TestConnectHTTPSAllow(t *testing.T) {
 
 	client := &http.Client{
 		Transport: &http.Transport{
-			Proxy:           http.ProxyURL(proxyURL),
-			TLSClientConfig: &tls.Config{RootCAs: pool},
+			Proxy:             http.ProxyURL(proxyURL),
+			TLSClientConfig:   &tls.Config{RootCAs: pool},
 			DisableKeepAlives: true,
 		},
 	}

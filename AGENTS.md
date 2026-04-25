@@ -10,7 +10,7 @@ make build        # dev build with version injection
 make release      # release build: stripped, static, CGO_ENABLED=0
 make test         # all tests
 make test-race    # with race detector (CI default)
-make fuzz         # 10 fuzz targets, FUZZ_TIME=30s, parallel
+make fuzz         # auto-discovers all Fuzz* targets, FUZZ_TIME=30s, parallel
 make lint         # go vet + staticcheck
 make coverage     # HTML coverage report
 make bench        # benchmarks on hot paths
@@ -30,32 +30,24 @@ cmd/warden-bridge/       vsock-to-TCP bridge for guest VMs
 internal/
   ca/                    TLS CA, auto-gen or external, per-host cert cache
   config/                YAML config types, parsing, validation, defaults
-  dns/                   resolver (stdlib wrapper), TTL cache, IP denylist
+  dns/                   resolver (stdlib/DoT), TTL cache, IP denylist
   health/                /healthz + /readyz on separate port
   inject/                header/query injection, ${VAR} template resolution
   listener/              TCP + vsock listener factory, connection limiter
   policy/                PolicyEngine interface, host/path glob, first-match-wins
   proxy/                 HTTP forward proxy + HTTPS CONNECT MITM handler
-  secrets/               SecretSource interface, env + file implementations
-  telemetry/             TelemetryExporter interface, slog JSON implementation
+  secrets/               SecretSource interface: env, file, vault, kubernetes, github-app
+  telemetry/             TelemetryExporter interface: slog JSON, OTLP/HTTP, multi-exporter
   version/               version/commit/date vars (injected via ldflags)
 ```
 
 ## Key Interfaces
 
-All interfaces take `context.Context` first param.
+All interfaces take `context.Context` first param. See [Development](docs/development.md) for full signatures.
 
-**PolicyEngine** (`internal/policy/types.go`):
-- `Evaluate(ctx, *RequestContext) (*PolicyDecision, error)` — first-match-wins, default-deny
-- `CanMatchHost(host string) bool` — early CONNECT rejection before TLS handshake
-
-**SecretSource** (`internal/secrets/source.go`):
-- `Resolve(ctx, name string) (string, bool, error)` — resolve variable by name
-- Implementations: `EnvSource`, `FileSource` (uses `os.Root` for path traversal safety)
-
-**TelemetryExporter** (`internal/telemetry/types.go`):
-- `LogRequest(ctx, RequestLog) error` — log every proxied request
-- Implementation: `SlogExporter` using `log/slog` with `slog.JSONHandler`
+- **PolicyEngine** — `Evaluate` (first-match-wins, default-deny) + `CanMatchHost` (early CONNECT rejection)
+- **SecretSource** — `Resolve(ctx, name) (string, bool, error)`. Implementations: env, file, vault, kubernetes, github-app. See [Secrets](docs/secrets.md).
+- **TelemetryExporter** — `LogRequest`, `StartSpan`, `RecordMetric`, `Close`. Implementations: slog, OTLP/HTTP, multi. See [Telemetry](docs/telemetry.md).
 
 ## Request Flow
 
@@ -67,37 +59,29 @@ All interfaces take `context.Context` first param.
 ## Code Conventions
 
 - **All interactions through Make** — never run `go` commands direct
-- **log/slog** for all logging — `slog.NewJSONHandler(os.Stdout, nil)`
-- **Default-deny** — no matching policy = 403 Forbidden
-- **Fail-closed** — secret resolution failure = 403, not forward without auth
-- **No comments unless WHY non-obvious** — self-documenting code
-- **Errors**: return last value, wrap with `fmt.Errorf("context: %w", err)` at boundaries
+- **Default-deny** / **fail-closed** — no match = 403, secret failure = 403
+- **No comments unless WHY non-obvious**
+- **Errors**: wrap with `fmt.Errorf("context: %w", err)` at boundaries
 - **No panics** in library code
-- **ECDSA P-256** for all generated keys — `PrivateKey.Bytes()` not big.Int fields (deprecated Go 1.25)
-- **os.Root** for file access — prevents path traversal by design
-- **net/http ServeMux patterns** (`GET /healthz`) for routing
+- **ECDSA P-256** for generated keys, **os.Root** for file access
+- **log/slog** for logging, **net/http ServeMux patterns** for routing
 
 ## Testing
 
 - Every package has `_test.go` files — unit, integration, fuzz
-- **Fuzz targets** on all input-parsing surfaces (10 targets): globs, templates, config, certs, IPs, headers, requests
+- **Fuzz targets** auto-discovered by `make fuzz` (grep for `func Fuzz*` in `*_test.go`)
 - **Race detector** required in CI (`make test-race`)
-- **Benchmarks** on policy eval (~118ns/op), CA cert gen, DNS, secret resolution
 - Test helpers use `t.Helper()`, `t.TempDir()`, `t.Setenv()`
 - Proxy integration tests use `httptest.NewServer` / `httptest.NewTLSServer`
-- Concurrent tests use `sync.WaitGroup`, `atomic`, channels
 
-## Build & Release
+## Documentation
 
-- `make build` — dev build, includes `-ldflags` for version/commit/date
-- `make release` — production: `CGO_ENABLED=0`, `-trimpath`, `-s -w` (stripped)
-- Version from `git describe --tags --always --dirty`
-- `./bin/warden --version` prints version info
+Full documentation lives in [`docs/`](docs/):
 
-## Adding New Features
-
-**New secret backend:** implement `SecretSource` in `internal/secrets/`, register type string in `internal/config/config.go` validation, wire in `cmd/warden/main.go`.
-
-**New policy engine:** implement `PolicyEngine` interface (both `Evaluate` and `CanMatchHost`), swap in `cmd/warden/main.go`.
-
-**New telemetry backend:** implement `TelemetryExporter` in `internal/telemetry/`, wire in `cmd/warden/main.go`.
+- [Configuration](docs/configuration.md) — full config reference, defaults, validation
+- [Policies](docs/policies.md) — rules, globs, evaluation order, injection
+- [Secrets](docs/secrets.md) — all backend types with examples
+- [Telemetry](docs/telemetry.md) — logs, traces, metrics, OTLP
+- [DNS](docs/dns.md) — resolution, DoT, caching, IP denylist
+- [Deployment](docs/deployment.md) — container, microVM, agent trust
+- [Development](docs/development.md) — building, testing, extending

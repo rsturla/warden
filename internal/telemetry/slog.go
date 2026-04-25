@@ -45,4 +45,16 @@ func (e *SlogExporter) LogRequest(ctx context.Context, entry RequestLog) error {
 	return nil
 }
 
+type NoopSpan struct{}
+
+func (NoopSpan) End()                  {}
+func (NoopSpan) SetStatus(int, string) {}
+func (NoopSpan) AddAttr(string, any)   {}
+
+func (e *SlogExporter) StartSpan(ctx context.Context, _ string, _ ...SpanAttr) (context.Context, SpanHandle) {
+	return ctx, NoopSpan{}
+}
+
+func (e *SlogExporter) RecordMetric(_ context.Context, _ string, _ float64, _ ...MetricAttr) {}
+
 func (e *SlogExporter) Close(_ context.Context) error { return nil }

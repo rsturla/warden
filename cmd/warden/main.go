@@ -67,20 +67,62 @@ func run(configPath string, logger *slog.Logger) error {
 		case "env":
 			sources = append(sources, secrets.NewEnvSource())
 		case "file":
-			fs, err := secrets.NewFileSource(s.Path)
+			fs, err := secrets.NewFileSource(s.File.Path)
 			if err != nil {
 				return err
 			}
 			sources = append(sources, fs)
+		case "vault":
+			mount := s.Vault.Mount
+			if mount == "" {
+				mount = "secret"
+			}
+			auth := s.Vault.Auth
+			if auth == "" {
+				auth = "token"
+			}
+			vs, err := secrets.NewVaultSource(secrets.VaultConfig{
+				Address: s.Vault.Address,
+				Mount:   mount,
+				Prefix:  s.Vault.Prefix,
+				Auth:    auth,
+			})
+			if err != nil {
+				return err
+			}
+			sources = append(sources, vs)
+		case "kubernetes":
+			ks, err := secrets.NewKubernetesSource(secrets.K8sConfig{
+				Namespace: s.Kubernetes.Namespace,
+			})
+			if err != nil {
+				return err
+			}
+			sources = append(sources, ks)
+		case "github-app":
+			gs, err := secrets.NewGitHubAppSource(secrets.GitHubAppConfig{
+				AppID:          s.GitHubApp.AppID,
+				InstallationID: s.GitHubApp.InstallationID,
+				PrivateKeyPath: s.GitHubApp.PrivateKeyPath,
+			})
+			if err != nil {
+				return err
+			}
+			sources = append(sources, gs)
 		}
 	}
 	chain := secrets.NewChain(sources...)
 
 	// DNS
-	resolver := dns.NewStdlibResolver(cfg.DNS.Servers)
-	var dnsResolver dns.Resolver = resolver
+	var baseResolver dns.Resolver
+	if cfg.DNS.DoT.Enabled {
+		baseResolver = dns.NewDoTResolver(cfg.DNS.DoT.Server)
+	} else {
+		baseResolver = dns.NewStdlibResolver(cfg.DNS.Servers)
+	}
+	var dnsResolver dns.Resolver = baseResolver
 	if cfg.DNS.Cache.Enabled {
-		dnsResolver = dns.NewCachingResolver(resolver, time.Duration(cfg.DNS.Cache.MaxTTL)*time.Second)
+		dnsResolver = dns.NewCachingResolver(baseResolver, time.Duration(cfg.DNS.Cache.MaxTTL)*time.Second)
 	}
 
 	denylist, err := dns.NewDenylist(cfg.DNS.DenyResolvedIPs)
@@ -95,7 +137,17 @@ func run(configPath string, logger *slog.Logger) error {
 	}
 
 	// Telemetry
-	exporter := telemetry.NewSlogExporter(logger)
+	slogExporter := telemetry.NewSlogExporter(logger)
+	var exporter telemetry.TelemetryExporter = slogExporter
+	if cfg.Telemetry.Traces.Enabled || cfg.Telemetry.Metrics.Enabled {
+		otelExp := telemetry.NewOTELExporter(telemetry.OTELConfig{
+			TracesEndpoint:  cfg.Telemetry.Traces.Endpoint,
+			MetricsEndpoint: cfg.Telemetry.Metrics.Endpoint,
+			TracesEnabled:   cfg.Telemetry.Traces.Enabled,
+			MetricsEnabled:  cfg.Telemetry.Metrics.Enabled,
+		})
+		exporter = telemetry.NewMultiExporter(slogExporter, otelExp)
+	}
 
 	// Proxy
 	p := proxy.New(proxy.Config{

@@ -221,12 +221,87 @@ policies:
 func TestValidateInvalidSecretType(t *testing.T) {
 	data := []byte(`
 secrets:
-  - type: vault
+  - type: redis
 policies: []
 `)
 	_, err := Parse(data)
 	if err == nil {
 		t.Fatal("expected error for unsupported secret type")
+	}
+}
+
+func TestValidateVaultSecretMissingAddress(t *testing.T) {
+	data := []byte(`
+secrets:
+  - type: vault
+policies: []
+`)
+	_, err := Parse(data)
+	if err == nil {
+		t.Fatal("expected error for vault secret without address")
+	}
+}
+
+func TestValidateVaultSecretValid(t *testing.T) {
+	data := []byte(`
+secrets:
+  - type: vault
+    address: https://vault.example.com:8200
+policies: []
+`)
+	_, err := Parse(data)
+	if err != nil {
+		t.Fatalf("valid vault config rejected: %v", err)
+	}
+}
+
+func TestValidateGitHubAppSecretMissingFields(t *testing.T) {
+	data := []byte(`
+secrets:
+  - type: github-app
+policies: []
+`)
+	_, err := Parse(data)
+	if err == nil {
+		t.Fatal("expected error for github-app without required fields")
+	}
+}
+
+func TestValidateKubernetesSecretValid(t *testing.T) {
+	data := []byte(`
+secrets:
+  - type: kubernetes
+policies: []
+`)
+	_, err := Parse(data)
+	if err != nil {
+		t.Fatalf("kubernetes secret should be valid: %v", err)
+	}
+}
+
+func TestValidateDoTMissingServer(t *testing.T) {
+	data := []byte(`
+dns:
+  dot:
+    enabled: true
+policies: []
+`)
+	_, err := Parse(data)
+	if err == nil {
+		t.Fatal("expected error for dot enabled without server")
+	}
+}
+
+func TestValidateTracesEnabledMissingEndpoint(t *testing.T) {
+	data := []byte(`
+telemetry:
+  traces:
+    enabled: true
+policies: []
+`)
+	_, err := Parse(data)
+	if err == nil {
+		t.Fatal("expected error for traces enabled without endpoint")
 	}
 }
 

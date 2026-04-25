@@ -1,4 +1,4 @@
-.PHONY: all build test test-race test-short fuzz lint vet clean deps deps-update \
+.PHONY: all build test test-race test-short fuzz lint vet fmt clean deps deps-update \
         deps-check coverage bench run test-e2e release help
 
 MODULE        := github.com/rsturla/warden
@@ -58,23 +58,23 @@ test-e2e: build ## Run end-to-end tests
 
 ## --- Fuzz ---
 
-fuzz: ## Run all fuzz targets (FUZZ_TIME=30s)
-	go test -fuzz=FuzzCompilePathGlob -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/policy/
-	go test -fuzz=FuzzPathMatch -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/policy/
-	go test -fuzz=FuzzCompileHostGlob -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/policy/
-	go test -fuzz=FuzzHostMatch -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/policy/
-	go test -fuzz=FuzzConfigParse -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/config/
-	go test -fuzz=FuzzResolveTemplate -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/secrets/
-	go test -fuzz=FuzzGetOrCreateCert -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/ca/
-	go test -fuzz=FuzzDenylistCheck -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/dns/
-	go test -fuzz=FuzzInjectHeaders -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/inject/
-	go test -fuzz=FuzzProxyRequest -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) ./internal/proxy/
+fuzz: ## Run all fuzz targets (FUZZ_TIME=30s), auto-discovered
+	@grep -r '^func Fuzz' --include='*_test.go' -l . | while read file; do \
+		pkg=$$(dirname "$$file"); \
+		grep -o '^func Fuzz[A-Za-z0-9_]*' "$$file" | sed 's/^func //' | while read target; do \
+			echo "=== FUZZ $$target ($$pkg) ==="; \
+			go test -fuzz="$$target" -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) "./$$pkg/" || exit 1; \
+		done || exit 1; \
+	done
 
 ## --- Quality ---
 
-lint: vet ## Run all linters
+lint: fmt vet ## Run all linters
 	@which staticcheck > /dev/null 2>&1 || go install honnef.co/go/tools/cmd/staticcheck@latest
 	staticcheck ./...
+
+fmt: ## Check gofmt formatting
+	@test -z "$$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -l .; exit 1; }
 
 vet: ## Run go vet
 	go vet ./...

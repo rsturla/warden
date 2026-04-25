@@ -48,8 +48,32 @@ type CacheConfig struct {
 }
 
 type SecretConfig struct {
-	Type string `yaml:"type"`
+	Type       string                `yaml:"type"`
+	File       FileSecretConfig      `yaml:",inline"`
+	Vault      VaultSecretConfig     `yaml:",inline"`
+	Kubernetes K8sSecretConfig       `yaml:",inline"`
+	GitHubApp  GitHubAppSecretConfig `yaml:",inline"`
+}
+
+type FileSecretConfig struct {
 	Path string `yaml:"path"`
+}
+
+type VaultSecretConfig struct {
+	Address string `yaml:"address"`
+	Mount   string `yaml:"mount"`
+	Prefix  string `yaml:"prefix"`
+	Auth    string `yaml:"auth"`
+}
+
+type K8sSecretConfig struct {
+	Namespace string `yaml:"namespace"`
+}
+
+type GitHubAppSecretConfig struct {
+	AppID          int64  `yaml:"app_id"`
+	InstallationID int64  `yaml:"installation_id"`
+	PrivateKeyPath string `yaml:"private_key_path"`
 }
 
 type PolicyRule struct {
@@ -161,18 +185,46 @@ func (c *Config) Validate() error {
 	}
 	for _, s := range c.Secrets {
 		switch s.Type {
-		case "env", "file":
+		case "env":
+		case "file":
+			if s.File.Path == "" {
+				return fmt.Errorf("secret source 'file' requires path")
+			}
+		case "vault":
+			if s.Vault.Address == "" {
+				return fmt.Errorf("secret source 'vault' requires address")
+			}
+			if s.Vault.Auth != "" && s.Vault.Auth != "token" && s.Vault.Auth != "kubernetes" {
+				return fmt.Errorf("secret source 'vault': auth must be 'token' or 'kubernetes', got %q", s.Vault.Auth)
+			}
+		case "kubernetes":
+		case "github-app":
+			if s.GitHubApp.AppID <= 0 {
+				return fmt.Errorf("secret source 'github-app' requires positive app_id")
+			}
+			if s.GitHubApp.InstallationID <= 0 {
+				return fmt.Errorf("secret source 'github-app' requires positive installation_id")
+			}
+			if s.GitHubApp.PrivateKeyPath == "" {
+				return fmt.Errorf("secret source 'github-app' requires private_key_path")
+			}
 		default:
-			return fmt.Errorf("secret source type %q not supported (use 'env' or 'file')", s.Type)
+			return fmt.Errorf("secret source type %q not supported", s.Type)
 		}
-		if s.Type == "file" && s.Path == "" {
-			return fmt.Errorf("secret source 'file' requires path")
-		}
+	}
+	if c.DNS.DoT.Enabled && c.DNS.DoT.Server == "" {
+		return fmt.Errorf("dns.dot.server is required when dot is enabled")
 	}
 	for _, cidr := range c.DNS.DenyResolvedIPs {
 		if _, err := netip.ParsePrefix(cidr); err != nil {
 			return fmt.Errorf("invalid CIDR in deny_resolved_ips: %q: %w", cidr, err)
 		}
+	}
+	if c.Telemetry.Traces.Enabled && c.Telemetry.Traces.Endpoint == "" {
+		return fmt.Errorf("telemetry.traces.endpoint is required when traces are enabled")
+	}
+	if c.Telemetry.Metrics.Enabled && c.Telemetry.Metrics.Endpoint == "" {
+		return fmt.Errorf("telemetry.metrics.endpoint is required when metrics are enabled")
 	}
 	return nil
 }

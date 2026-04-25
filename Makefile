@@ -1,6 +1,7 @@
 .PHONY: all build test test-race test-short fuzz lint vet clean deps deps-update \
-        deps-check coverage bench run test-e2e help
+        deps-check coverage bench run test-e2e release help
 
+MODULE        := github.com/rsturla/warden
 WARDEN_BIN    := bin/warden
 BRIDGE_BIN    := bin/warden-bridge
 CONFIG        ?= config.example.yaml
@@ -8,13 +9,25 @@ FUZZ_TIME     ?= 30s
 FUZZ_PARALLEL ?= $(shell nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 COVER_PROFILE := coverage.out
 
+VERSION       ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+COMMIT        := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+DATE          := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
+LDFLAGS       := -s -w \
+                 -X $(MODULE)/internal/version.Version=$(VERSION) \
+                 -X $(MODULE)/internal/version.Commit=$(COMMIT) \
+                 -X $(MODULE)/internal/version.Date=$(DATE)
+
 all: deps lint test build ## Full pipeline: deps → lint → test → build
 
 ## --- Build ---
 
-build: ## Build all binaries
-	go build -o $(WARDEN_BIN) ./cmd/warden
-	go build -o $(BRIDGE_BIN) ./cmd/warden-bridge
+build: ## Build all binaries (dev)
+	go build -ldflags "$(LDFLAGS)" -o $(WARDEN_BIN) ./cmd/warden
+	go build -ldflags "$(LDFLAGS)" -o $(BRIDGE_BIN) ./cmd/warden-bridge
+
+release: ## Build release binaries (stripped, static, CGO disabled)
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(WARDEN_BIN) ./cmd/warden
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(BRIDGE_BIN) ./cmd/warden-bridge
 
 ## --- Dependencies ---
 

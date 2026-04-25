@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"fmt"
+
 	"github.com/rsturla/warden/internal/ca"
 	"github.com/rsturla/warden/internal/config"
 	"github.com/rsturla/warden/internal/dns"
@@ -19,11 +21,18 @@ import (
 	"github.com/rsturla/warden/internal/proxy"
 	"github.com/rsturla/warden/internal/secrets"
 	"github.com/rsturla/warden/internal/telemetry"
+	"github.com/rsturla/warden/internal/version"
 )
 
 func main() {
 	configPath := flag.String("config", "config.yaml", "path to config file")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("warden %s (commit: %s, built: %s)\n", version.Version, version.Commit, version.Date)
+		return
+	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	slog.SetDefault(logger)

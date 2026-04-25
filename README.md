@@ -144,4 +144,4 @@ See [Configuration](docs/configuration.md) for the full reference.
 
 ## License
 
-Proprietary — Hummingbird AI
+Apache License 2.0 — see [LICENSE](LICENSE) for details.

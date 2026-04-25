@@ -28,4 +28,4 @@ jobs:
       - name: Run fuzz targets
         run: make fuzz
         env:
-          FUZZ_TIME: ${{ inputs.fuzz-time || (github.event_name == 'schedule' && '60s') || '30s' }}
+          FUZZ_TIME: ${{ inputs.fuzz-time || (github.event_name == 'schedule' && '5m') || '30s' }}

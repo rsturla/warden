@@ -1,0 +1,59 @@
+server:
+  listen: "0.0.0.0:8080"
+  # listen: "vsock://:8080"
+  health_listen: "0.0.0.0:9090"
+
+ca:
+  auto: true
+  cert_output: /tmp/warden-ca.crt
+
+dns:
+  servers: ["8.8.8.8:53", "1.1.1.1:53"]
+  cache:
+    enabled: true
+    max_ttl: 300
+  deny_resolved_ips:
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+    - "192.168.0.0/16"
+    - "169.254.0.0/16"
+    - "127.0.0.0/8"
+
+secrets:
+  - type: env
+  - type: file
+    path: /run/secrets
+
+policies:
+  # Block cloud metadata and loopback
+  - name: block-cloud-metadata
+    host: "169.254.169.254"
+    action: deny
+
+  - name: block-loopback
+    host: "localhost"
+    action: deny
+
+  - name: block-loopback-ip
+    host: "127.0.0.1"
+    action: deny
+
+  # Application policies
+  - name: github-api
+    host: "api.github.com"
+    path: "/repos/myorg/**"
+    methods: ["GET", "POST", "PATCH"]
+    action: allow
+    inject:
+      headers:
+        Authorization: "Bearer ${GITHUB_TOKEN}"
+
+  - name: pypi-read-only
+    host: "pypi.org"
+    methods: ["GET"]
+    action: allow
+
+telemetry:
+  logs:
+    level: info
+    format: json

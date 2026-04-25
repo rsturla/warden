@@ -16,24 +16,21 @@ Warden solves this by performing TLS interception:
 
 ## Architecture
 
-Warden runs as a sidecar — one instance per agent. Each agent gets its own Warden with its own policy configuration. The agent connects to Warden over TCP or vsock depending on the deployment model. See [Deployment](docs/deployment.md) for full setup guides.
+Warden runs alongside agents — one instance per agent or agent type. The agent connects to Warden over TCP or vsock depending on the deployment model. NetworkPolicy ensures agents can only reach the internet through Warden. See [Deployment](docs/deployment.md) for full setup guides.
 
-**Container sidecar (Kubernetes):**
+**Kubernetes / OpenShift (separate pods, NetworkPolicy enforced):**
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  Pod                                                 │
-│                                                      │
-│  ┌─────────────┐  TCP     ┌────────────────────────┐ │        ┌──────────────┐
-│  │             │────────▶ │        Warden           │ │  TLS   │              │
-│  │    Agent    │          │                        │─┼──────▶ │  Upstream    │
-│  │  (sandbox)  │          │  Policy ─▶ Inject      │ │        │  Service     │
-│  │             │◀────────│         ─▶ Forward     │◀┼──────  │              │
-│  └─────────────┘          └────────────────────────┘ │        └──────────────┘
-│       │                     │                        │
-│  Trusts Warden CA      :9090/healthz                 │
-│                                                      │
-└──────────────────────────────────────────────────────┘
+┌─────────────────────┐     ┌─────────────────────┐
+│  Agent Pod          │     │  Warden Pod          │
+│                     │     │                      │
+│  HTTP_PROXY=warden  │────▶│  :8080 proxy         │────▶ upstream
+│  SSL_CERT_FILE=...  │     │  :9090 health        │
+│                     │     │                      │
+│  NetworkPolicy:     │     │  NetworkPolicy:      │
+│   egress → warden   │     │   egress → anywhere  │
+│   only              │     │   ingress ← agent    │
+└─────────────────────┘     └─────────────────────┘
 ```
 
 **MicroVM (Firecracker, Cloud Hypervisor, QEMU):**

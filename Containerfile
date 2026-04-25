@@ -7,13 +7,13 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG DATE=unknown
 
-RUN CGO_ENABLED=0 go build -trimpath \
+RUN go build -trimpath \
     -ldflags="-s -w \
       -X github.com/rsturla/warden/internal/version.Version=${VERSION} \
       -X github.com/rsturla/warden/internal/version.Commit=${COMMIT} \
       -X github.com/rsturla/warden/internal/version.Date=${DATE}" \
     -o /warden ./cmd/warden && \
-    CGO_ENABLED=0 go build -trimpath \
+    go build -trimpath \
     -ldflags="-s -w \
       -X github.com/rsturla/warden/internal/version.Version=${VERSION} \
       -X github.com/rsturla/warden/internal/version.Commit=${COMMIT} \

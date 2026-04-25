@@ -38,6 +38,19 @@ jobs:
       - name: Run gosec
         run: gosec ./...
 
+  trufflehog:
+    name: Secret Scanner
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+      - name: Scan for secrets
+        uses: trufflesecurity/trufflehog@17456f8c7d042d8c82c9a8ca9e937231f9f42e26 # v3.95.2
+        with:
+          extra_args: --only-verified
+
   dependency-review:
     name: Dependency Review
     runs-on: ubuntu-latest

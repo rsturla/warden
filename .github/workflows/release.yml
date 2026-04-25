@@ -1,0 +1,156 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  binaries:
+    name: Build Binaries (${{ matrix.arch }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+
+      - name: Build binaries
+        env:
+          GOOS: linux
+          GOARCH: ${{ matrix.arch }}
+          CGO_ENABLED: "0"
+        run: |
+          VERSION=${GITHUB_REF_NAME}
+          COMMIT=$(git rev-parse --short HEAD)
+          DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          LDFLAGS="-s -w \
+            -X github.com/rsturla/warden/internal/version.Version=${VERSION} \
+            -X github.com/rsturla/warden/internal/version.Commit=${COMMIT} \
+            -X github.com/rsturla/warden/internal/version.Date=${DATE}"
+
+          go build -trimpath -ldflags="${LDFLAGS}" -o warden ./cmd/warden
+          go build -trimpath -ldflags="${LDFLAGS}" -o warden-bridge ./cmd/warden-bridge
+
+      - name: Package binaries
+        run: |
+          tar czf warden-${GITHUB_REF_NAME}-linux-${{ matrix.arch }}.tar.gz warden warden-bridge
+
+      - name: Upload archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: binaries-${{ matrix.arch }}
+          path: warden-*.tar.gz
+          archive: false
+          retention-days: 1
+
+  container:
+    name: Build Container (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Build image
+        run: |
+          buildah build \
+            --build-arg VERSION=${GITHUB_REF_NAME} \
+            --build-arg COMMIT=$(git rev-parse --short HEAD) \
+            --build-arg DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+            -t warden:${{ matrix.arch }} \
+            -f Containerfile .
+
+      - name: Verify image
+        run: |
+          podman run --rm localhost/warden:${{ matrix.arch }} -version
+
+      - name: Save image
+        run: |
+          podman save --format oci-archive -o warden-container-${{ matrix.arch }}.tar localhost/warden:${{ matrix.arch }}
+
+      - name: Upload image archive
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: container-${{ matrix.arch }}
+          path: warden-container-${{ matrix.arch }}.tar
+          archive: false
+          retention-days: 1
+
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    needs: [binaries, container]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Download binary artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: binaries-*
+          merge-multiple: true
+          path: dist/
+
+      - name: Download container artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: container-*
+          merge-multiple: true
+          path: dist/
+
+      - name: Create container manifest
+        run: |
+          podman load -i dist/warden-container-amd64.tar
+          podman load -i dist/warden-container-arm64.tar
+          buildah manifest create warden:latest
+          buildah manifest add warden:latest localhost/warden:amd64 --arch amd64
+          buildah manifest add warden:latest localhost/warden:arm64 --arch arm64
+          buildah manifest inspect warden:latest
+
+      - name: Generate checksums
+        working-directory: dist
+        run: |
+          sha256sum warden-*.tar.gz > checksums.txt
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+
+      - name: Sign checksums
+        working-directory: dist
+        run: |
+          cosign sign-blob --yes checksums.txt \
+            --output-signature checksums.txt.sig \
+            --output-certificate checksums.txt.pem
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610 # v0.24.0
+        with:
+          path: .
+          format: spdx-json
+          output-file: dist/sbom.spdx.json
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          generate_release_notes: true
+          files: |
+            dist/warden-*.tar.gz
+            dist/checksums.txt
+            dist/checksums.txt.sig
+            dist/checksums.txt.pem
+            dist/sbom.spdx.json

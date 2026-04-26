@@ -58,7 +58,7 @@ func (p *Proxy) handleInterceptForward(w http.ResponseWriter, req *http.Request,
 	body := buildTokenResponse(token, ttl)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(body)
+	_, _ = w.Write(body)
 
 	p.logIntercept(ctx, req, decision, rt.id, start)
 }

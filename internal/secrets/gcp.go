@@ -15,8 +15,8 @@ import (
 	"github.com/rsturla/warden/internal/config"
 )
 
-const gcpDefaultTokenURL = "https://oauth2.googleapis.com/token"
-const gcpMetadataTokenURL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token"
+const gcpDefaultTokenURL = "https://oauth2.googleapis.com/token"                                                         // #nosec G101 -- well-known Google OAuth2 endpoint URL, not credentials
+const gcpMetadataTokenURL = "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token" // #nosec G101 -- GCE metadata endpoint URL, not credentials
 const gcpDefaultScope = "https://www.googleapis.com/auth/cloud-platform"
 
 func init() {
@@ -181,7 +181,7 @@ func (s *GCPServiceAccountSource) metadataToken(ctx context.Context) (string, ti
 }
 
 func doGCPTokenRequest(client *http.Client, req *http.Request) (string, time.Time, error) {
-	resp, err := client.Do(req)
+	resp, err := client.Do(req) // #nosec G704 -- URL constructed from admin-configured credentials file or well-known GCE metadata endpoint
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("gcp token request: %w", err)
 	}

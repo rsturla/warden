@@ -75,7 +75,7 @@ func NewGCPAuthorizedUserSource(cfg GCPAuthorizedUserConfig) (*GCPAuthorizedUser
 }
 
 func (s *GCPAuthorizedUserSource) loadCredentials(path string) error {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) // #nosec G304 -- path is admin-configured credentials_file from trusted config
 	if err != nil {
 		return fmt.Errorf("reading gcp credentials: %w", err)
 	}

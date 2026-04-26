@@ -22,6 +22,11 @@ type Tenant struct {
 type TenantSpec struct {
 	Policies []api.PolicyRule   `json:"policies"`
 	Secrets  []api.SecretConfig `json:"secrets,omitempty"`
+	// CertificateSecretName references a pre-existing K8s TLS Secret for mTLS client cert.
+	// When set, the operator skips cert-manager Certificate creation and uses this Secret.
+	// The Secret must contain tls.crt, tls.key, and ca.crt. The cert CN must match the tenant name.
+	// +optional
+	CertificateSecretName string `json:"certificateSecretName,omitempty"`
 }
 
 type TenantStatus struct {

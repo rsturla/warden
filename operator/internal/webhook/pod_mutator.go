@@ -60,7 +60,16 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 		return admission.Denied("WardenProxy does not have multiTenant enabled")
 	}
 
-	certSecretName := "warden-tenant-" + tenantName + "-cert"
+	tenant, err := m.findTenant(ctx, tenantName, req.Namespace)
+	if err != nil {
+		logger.Error(err, "tenant not found", "tenant", tenantName)
+		return admission.Errored(http.StatusInternalServerError, err)
+	}
+
+	certSecretName := tenant.Status.CertificateSecretName
+	if certSecretName == "" {
+		certSecretName = "warden-tenant-" + tenantName + "-cert"
+	}
 	proxyAddr := fmt.Sprintf("%s.%s.svc:%d", proxy.Name, proxy.Namespace, proxyPort(proxy))
 
 	bridgeResources := proxy.Spec.MultiTenant.BridgeResources
@@ -119,6 +128,14 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
+}
+
+func (m *PodMutator) findTenant(ctx context.Context, name, namespace string) (*wardenio.Tenant, error) {
+	var tenant wardenio.Tenant
+	if err := m.Client.Get(ctx, client.ObjectKey{Name: name, Namespace: namespace}, &tenant); err != nil {
+		return nil, fmt.Errorf("tenant %q: %w", name, err)
+	}
+	return &tenant, nil
 }
 
 func (m *PodMutator) findWardenProxy(ctx context.Context, namespace string) (*wardenio.WardenProxy, error) {

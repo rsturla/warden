@@ -45,6 +45,15 @@ func testProxy(ns string) *wardenio.WardenProxy {
 	}
 }
 
+func testTenant(ns, name string) *wardenio.Tenant {
+	return &wardenio.Tenant{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ns},
+		Status: wardenio.TenantStatus{
+			CertificateSecretName: "warden-tenant-" + name + "-cert",
+		},
+	}
+}
+
 func admissionRequest(t *testing.T, pod *corev1.Pod, ns string) admission.Request {
 	t.Helper()
 	raw, err := json.Marshal(pod)
@@ -101,7 +110,7 @@ func applyPatch(t *testing.T, original *corev1.Pod, resp admission.Response) *co
 }
 
 func TestPodMutator_NoLabel(t *testing.T) {
-	m := newTestMutator(t, testProxy("default"))
+	m := newTestMutator(t, testProxy("default"), testTenant("default", "alpha"))
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: "test", Labels: map[string]string{}},
 		Spec:       corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "test:latest"}}},
@@ -114,7 +123,7 @@ func TestPodMutator_NoLabel(t *testing.T) {
 }
 
 func TestPodMutator_InjectLabel_NoTenant(t *testing.T) {
-	m := newTestMutator(t, testProxy("default"))
+	m := newTestMutator(t, testProxy("default"), testTenant("default", "alpha"))
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   "test",
@@ -130,7 +139,7 @@ func TestPodMutator_InjectLabel_NoTenant(t *testing.T) {
 }
 
 func TestPodMutator_InjectsBridge(t *testing.T) {
-	m := newTestMutator(t, testProxy("default"))
+	m := newTestMutator(t, testProxy("default"), testTenant("default", "alpha"))
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
@@ -170,7 +179,7 @@ func TestPodMutator_InjectsBridge(t *testing.T) {
 }
 
 func TestPodMutator_InjectsEnvVars(t *testing.T) {
-	m := newTestMutator(t, testProxy("default"))
+	m := newTestMutator(t, testProxy("default"), testTenant("default", "alpha"))
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
@@ -208,7 +217,7 @@ func TestPodMutator_InjectsEnvVars(t *testing.T) {
 }
 
 func TestPodMutator_InjectsCertVolume(t *testing.T) {
-	m := newTestMutator(t, testProxy("default"))
+	m := newTestMutator(t, testProxy("default"), testTenant("default", "alpha"))
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
@@ -235,7 +244,7 @@ func TestPodMutator_InjectsCertVolume(t *testing.T) {
 }
 
 func TestPodMutator_PreservesExistingEnv(t *testing.T) {
-	m := newTestMutator(t, testProxy("default"))
+	m := newTestMutator(t, testProxy("default"), testTenant("default", "alpha"))
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
@@ -267,7 +276,7 @@ func TestPodMutator_PreservesExistingEnv(t *testing.T) {
 }
 
 func TestPodMutator_Idempotent(t *testing.T) {
-	m := newTestMutator(t, testProxy("default"))
+	m := newTestMutator(t, testProxy("default"), testTenant("default", "alpha"))
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
@@ -294,7 +303,7 @@ func TestPodMutator_Idempotent(t *testing.T) {
 }
 
 func TestPodMutator_SetsAgentLabel(t *testing.T) {
-	m := newTestMutator(t, testProxy("default"))
+	m := newTestMutator(t, testProxy("default"), testTenant("default", "alpha"))
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",
@@ -333,8 +342,44 @@ func TestPodMutator_NoProxyInNamespace(t *testing.T) {
 	}
 }
 
+func TestPodMutator_ExternalCertSecret(t *testing.T) {
+	tenant := &wardenio.Tenant{
+		ObjectMeta: metav1.ObjectMeta{Name: "ext-cert", Namespace: "default"},
+		Spec: wardenio.TenantSpec{
+			CertificateSecretName: "my-custom-cert-secret",
+		},
+		Status: wardenio.TenantStatus{
+			CertificateSecretName: "my-custom-cert-secret",
+		},
+	}
+	m := newTestMutator(t, testProxy("default"), tenant)
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test",
+			Labels: map[string]string{
+				labelInject: "true",
+				labelTenant: "ext-cert",
+			},
+		},
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app", Image: "test:latest"}}},
+	}
+
+	resp := m.Handle(context.Background(), admissionRequest(t, pod, "default"))
+	patched := applyPatch(t, pod, resp)
+
+	var found bool
+	for _, v := range patched.Spec.Volumes {
+		if v.Name == certVolName && v.Secret != nil && v.Secret.SecretName == "my-custom-cert-secret" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected volume with custom secret name 'my-custom-cert-secret'")
+	}
+}
+
 func TestPodMutator_MultipleContainers(t *testing.T) {
-	m := newTestMutator(t, testProxy("default"))
+	m := newTestMutator(t, testProxy("default"), testTenant("default", "alpha"), testTenant("default", "beta"))
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test",

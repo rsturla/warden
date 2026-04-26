@@ -73,14 +73,19 @@ func (r *TenantReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	if proxy.Spec.MultiTenant != nil {
-		if err := r.reconcileCertificate(ctx, &tenant, proxy); err != nil {
-			logger.Error(err, "certificate sync failed")
-			r.setCondition(&tenant, condTypeCertReady, metav1.ConditionFalse, "CertificateFailed", err.Error())
-			_ = r.Status().Update(ctx, &tenant)
-			return ctrl.Result{}, err
+		if tenant.Spec.CertificateSecretName != "" {
+			tenant.Status.CertificateSecretName = tenant.Spec.CertificateSecretName
+			r.setCondition(&tenant, condTypeCertReady, metav1.ConditionTrue, "ExternalCertificate", "using pre-existing certificate secret")
+		} else {
+			if err := r.reconcileCertificate(ctx, &tenant, proxy); err != nil {
+				logger.Error(err, "certificate sync failed")
+				r.setCondition(&tenant, condTypeCertReady, metav1.ConditionFalse, "CertificateFailed", err.Error())
+				_ = r.Status().Update(ctx, &tenant)
+				return ctrl.Result{}, err
+			}
+			r.setCondition(&tenant, condTypeCertReady, metav1.ConditionTrue, "CertificateCreated", "cert-manager Certificate created")
+			tenant.Status.CertificateSecretName = certSecretName(tenant.Name)
 		}
-		r.setCondition(&tenant, condTypeCertReady, metav1.ConditionTrue, "CertificateCreated", "cert-manager Certificate created")
-		tenant.Status.CertificateSecretName = certSecretName(tenant.Name)
 	}
 
 	r.setCondition(&tenant, condTypeSynced, metav1.ConditionTrue, "Synced", "tenant config synced")

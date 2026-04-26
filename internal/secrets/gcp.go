@@ -181,7 +181,7 @@ func (s *GCPServiceAccountSource) metadataToken(ctx context.Context) (string, ti
 }
 
 func doGCPTokenRequest(client *http.Client, req *http.Request) (string, time.Time, error) {
-	resp, err := client.Do(req) // #nosec G107 -- URL constructed from admin-configured credentials file or well-known GCE metadata endpoint
+	resp, err := client.Do(req) // #nosec G704 -- URL constructed from admin-configured credentials file or well-known GCE metadata endpoint
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("gcp token request: %w", err)
 	}

@@ -825,6 +825,60 @@ server:
   health_listen: "0.0.0.0:9090"
 ```
 
+## Kubernetes Operator (Declarative)
+
+For fully declarative management, use the Warden operator instead of manual manifests. The operator manages the proxy lifecycle, tenant configuration, and certificate provisioning via CRDs.
+
+### CRDs
+
+| CRD | API Group | Description |
+|-----|-----------|-------------|
+| `WardenProxy` | `wardenproxy.dev/v1alpha1` | Creates Deployment, Service, ConfigMap, NetworkPolicies |
+| `Tenant` | `wardenproxy.dev/v1alpha1` | Reconciles tenant config + cert-manager Certificate |
+
+### Example
+
+```yaml
+apiVersion: wardenproxy.dev/v1alpha1
+kind: WardenProxy
+metadata:
+  name: production
+spec:
+  image: ghcr.io/rsturla/warden:latest
+  multiTenant:
+    certificateIssuerRef:
+      name: tenant-ca-issuer
+      kind: Issuer
+  dns:
+    cache:
+      enabled: true
+    denyResolvedIPs:
+      - "169.254.0.0/16"
+---
+apiVersion: wardenproxy.dev/v1alpha1
+kind: Tenant
+metadata:
+  name: acme-team
+spec:
+  policies:
+    - name: allow-github
+      host: "api.github.com"
+      path: "/repos/acme/**"
+      methods: ["GET", "POST"]
+      action: allow
+      inject:
+        headers:
+          Authorization: "Bearer ${GITHUB_TOKEN}"
+  secrets:
+    - type: env
+```
+
+### Webhook Injection
+
+Pods labeled `wardenproxy.dev/inject=true` and `wardenproxy.dev/tenant=<name>` get the warden-bridge sidecar auto-injected. No manual sidecar configuration needed.
+
+See [operator/CLAUDE.md](../operator/CLAUDE.md) for full documentation.
+
 ## Build
 
 ```bash

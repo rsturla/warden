@@ -1,0 +1,52 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: warden-operator
+  namespace: system
+  labels:
+    app: warden-operator
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: warden-operator
+  template:
+    metadata:
+      labels:
+        app: warden-operator
+    spec:
+      serviceAccountName: warden-operator
+      containers:
+        - name: operator
+          image: warden-operator:latest
+          args:
+            - --leader-elect
+            - --health-probe-bind-address=:8081
+          ports:
+            - containerPort: 9443
+              name: webhook
+            - containerPort: 8081
+              name: health
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: warden-operator-webhook-tls

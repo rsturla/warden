@@ -59,11 +59,11 @@ test-e2e: build ## Run end-to-end tests
 ## --- Fuzz ---
 
 fuzz: ## Run all fuzz targets (FUZZ_TIME=30s), auto-discovered
-	@grep -r '^func Fuzz' --include='*_test.go' -l . | while read file; do \
+	@grep -r '^func Fuzz' --include='*_test.go' -l . | grep -v '^./operator/' | while read file; do \
 		pkg=$$(dirname "$$file"); \
 		grep -o '^func Fuzz[A-Za-z0-9_]*' "$$file" | sed 's/^func //' | while read target; do \
 			echo "=== FUZZ $$target ($$pkg) ==="; \
-			go test -fuzz="$$target" -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) "./$$pkg/" || exit 1; \
+			go test -fuzz="$$target" -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) -timeout=0 "./$$pkg/" || exit 1; \
 		done || exit 1; \
 	done
 
@@ -74,7 +74,7 @@ lint: fmt vet ## Run all linters
 	staticcheck ./...
 
 fmt: ## Check gofmt formatting
-	@test -z "$$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -l .; exit 1; }
+	@test -z "$$(gofmt -l $$(find . -name '*.go' -not -path './operator/*'))" || { echo "gofmt needed:"; gofmt -l $$(find . -name '*.go' -not -path './operator/*'); exit 1; }
 
 vet: ## Run go vet
 	go vet ./...

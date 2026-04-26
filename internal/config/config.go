@@ -7,8 +7,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/rsturla/warden/pkg/api"
 	"go.yaml.in/yaml/v3"
 )
+
+type PolicyRule = api.PolicyRule
+type InjectConfig = api.InjectConfig
+type SecretConfig = api.SecretConfig
+type FileSecretConfig = api.FileSecretConfig
+type VaultSecretConfig = api.VaultSecretConfig
+type K8sSecretConfig = api.K8sSecretConfig
+type GitHubAppSecretConfig = api.GitHubAppSecretConfig
 
 type Config struct {
 	Server    ServerConfig    `yaml:"server"`
@@ -58,49 +67,6 @@ type DoTConfig struct {
 type CacheConfig struct {
 	Enabled bool `yaml:"enabled"`
 	MaxTTL  int  `yaml:"max_ttl"`
-}
-
-type SecretConfig struct {
-	Type       string                `yaml:"type"`
-	File       FileSecretConfig      `yaml:",inline"`
-	Vault      VaultSecretConfig     `yaml:",inline"`
-	Kubernetes K8sSecretConfig       `yaml:",inline"`
-	GitHubApp  GitHubAppSecretConfig `yaml:",inline"`
-}
-
-type FileSecretConfig struct {
-	Path string `yaml:"path"`
-}
-
-type VaultSecretConfig struct {
-	Address string `yaml:"address"`
-	Mount   string `yaml:"mount"`
-	Prefix  string `yaml:"prefix"`
-	Auth    string `yaml:"auth"`
-}
-
-type K8sSecretConfig struct {
-	Namespace string `yaml:"namespace"`
-}
-
-type GitHubAppSecretConfig struct {
-	AppID          int64  `yaml:"app_id"`
-	InstallationID int64  `yaml:"installation_id"`
-	PrivateKeyPath string `yaml:"private_key_path"`
-}
-
-type PolicyRule struct {
-	Name    string        `yaml:"name"`
-	Host    string        `yaml:"host"`
-	Path    string        `yaml:"path"`
-	Methods []string      `yaml:"methods"`
-	Action  string        `yaml:"action"`
-	Inject  *InjectConfig `yaml:"inject,omitempty"`
-}
-
-type InjectConfig struct {
-	Headers map[string]string `yaml:"headers"`
-	Query   map[string]string `yaml:"query"`
 }
 
 type TelemetryConfig struct {

@@ -1,0 +1,79 @@
+name: Operator
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'operator/**'
+      - 'pkg/api/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'operator/**'
+      - 'pkg/api/**'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    working-directory: operator
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: operator/go.mod
+      - name: Lint
+        run: make lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: operator/go.mod
+      - name: Test with race detector
+        run: make test-race
+
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: operator/go.mod
+      - name: Fuzz
+        run: make fuzz
+        env:
+          FUZZ_TIME: 30s
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Setup Go
+        uses: ./.github/actions/setup-go
+        with:
+          go-version-file: operator/go.mod
+      - name: Build binary
+        run: make release
+      - name: Build container
+        run: docker build -t warden-operator:latest -f Containerfile ..

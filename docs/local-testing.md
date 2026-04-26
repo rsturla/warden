@@ -110,14 +110,16 @@ The E2E workflow (`.github/workflows/e2e.yml`) runs on PRs touching `cmd/`, `int
 
 On failure, Warden logs, test server logs, and pod status are captured.
 
-## Future Tests
+## Operator E2E Tests
 
-The following require the `feat/multi-tenancy` branch to be merged:
+The operator has its own kind-based E2E tests:
 
-- Multi-tenant mTLS with per-tenant policies and tenant isolation
-- Warden-bridge sidecar (TLS mode)
-- Tenant config hot reload
-- HTTPS CONNECT with MITM interception (requires upstream TLS trust chain)
+```bash
+./operator/hack/kind-e2e.sh     # deploy operator, create CRs, test webhook
+./operator/hack/kind-teardown.sh
+```
+
+Tests cover: WardenProxy CR → Deployment/Service/ConfigMap creation, Tenant CR → ConfigMap entry + status, webhook bridge injection (sidecar, env vars, labels), tenant deletion cleanup. See [operator/CLAUDE.md](../operator/CLAUDE.md).
 
 ## Manual Testing
 

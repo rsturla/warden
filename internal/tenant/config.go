@@ -3,14 +3,11 @@ package tenant
 import (
 	"fmt"
 
-	"github.com/rsturla/warden/internal/config"
+	"github.com/rsturla/warden/pkg/api"
 	"go.yaml.in/yaml/v3"
 )
 
-type TenantConfig struct {
-	Policies []config.PolicyRule   `yaml:"policies"`
-	Secrets  []config.SecretConfig `yaml:"secrets"`
-}
+type TenantConfig = api.TenantConfig
 
 func ParseTenantConfig(data []byte) (*TenantConfig, error) {
 	var tc TenantConfig

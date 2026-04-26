@@ -1,0 +1,21 @@
+apiVersion: wardenproxy.dev/v1alpha1
+kind: Tenant
+metadata:
+  name: alpha
+  namespace: agent-sandbox
+spec:
+  policies:
+    - name: allow-github
+      host: "api.github.com"
+      path: "/repos/acme/**"
+      methods: ["GET", "POST"]
+      action: allow
+      inject:
+        headers:
+          Authorization: "Bearer ${GITHUB_TOKEN}"
+    - name: allow-pypi
+      host: "pypi.org"
+      methods: ["GET"]
+      action: allow
+  secrets:
+    - type: env

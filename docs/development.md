@@ -191,3 +191,27 @@ Warden uses only 3 external dependencies. Everything else is Go stdlib:
 - `golang.org/x/sync` — errgroup for concurrent operations
 
 New features should use stdlib where feasible. All current secret backends (vault, kubernetes, github-app), DNS-over-TLS, and the OTLP exporter are implemented with stdlib only.
+
+## Shared Types (`pkg/api/`)
+
+Types shared between the core proxy and operator live in `pkg/api/`. This package is the serialization contract — the operator writes YAML using these types, and the proxy parses it. Both modules import from `pkg/api/`:
+
+- `PolicyRule`, `InjectConfig` — policy configuration
+- `SecretConfig` and backend-specific types — secret source configuration
+- `TenantConfig` — per-tenant policies + secrets
+
+Changes to these types must be compatible with both the core module and operator module.
+
+## Operator (`operator/`)
+
+The operator is a **separate Go module** with its own `go.mod`. It imports `pkg/api` from the core module via a `replace` directive. K8s dependencies (controller-runtime, client-go) stay in the operator module — the core proxy has zero K8s dependencies.
+
+```bash
+cd operator
+make              # full pipeline
+make test-race    # unit + envtest with race detector
+make fuzz         # fuzz targets
+make manifests    # generate CRD + RBAC YAML
+```
+
+See [operator/CLAUDE.md](../operator/CLAUDE.md) for full operator development guide.

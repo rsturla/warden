@@ -1,0 +1,35 @@
+apiVersion: wardenproxy.dev/v1alpha1
+kind: WardenProxy
+metadata:
+  name: production
+  namespace: agent-sandbox
+spec:
+  image: ghcr.io/rsturla/warden:latest
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 128Mi
+  dns:
+    cache:
+      enabled: true
+    denyResolvedIPs:
+      - "169.254.0.0/16"
+  multiTenant:
+    certificateIssuerRef:
+      name: tenant-ca-issuer
+      kind: Issuer
+    bridgeResources:
+      requests:
+        cpu: 10m
+        memory: 16Mi
+      limits:
+        cpu: 100m
+        memory: 32Mi
+  telemetry:
+    logs:
+      level: info
+      format: json

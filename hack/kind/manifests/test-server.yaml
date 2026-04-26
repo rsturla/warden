@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-server
+  namespace: agent-sandbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: test-server
+  template:
+    metadata:
+      labels:
+        app: test-server
+    spec:
+      containers:
+        - name: test-server
+          image: test-server:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 8443
+              name: https
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: test-server
+  namespace: agent-sandbox
+spec:
+  selector:
+    app: test-server
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+    - name: https
+      port: 443
+      targetPort: https

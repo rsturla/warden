@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: warden-config
+  namespace: agent-sandbox
+data:
+  config.yaml: |
+    server:
+      listen: "0.0.0.0:8080"
+      health_listen: "0.0.0.0:9090"
+    ca:
+      auto: true
+      cert_output: /shared/warden-ca.crt
+    dns:
+      cache:
+        enabled: true
+      deny_resolved_ips:
+        - "169.254.0.0/16"
+    secrets:
+      - type: env
+    policies:
+      - name: block-metadata
+        host: "169.254.169.254"
+        action: deny
+
+      - name: allow-api-v1
+        host: "test-server.agent-sandbox.svc"
+        path: "/api/v1/**"
+        methods: ["GET"]
+        action: allow
+
+      - name: allow-test-get
+        host: "test-server.agent-sandbox.svc"
+        path: "/get"
+        methods: ["GET"]
+        action: allow
+
+      - name: allow-test-headers
+        host: "test-server.agent-sandbox.svc"
+        path: "/headers"
+        methods: ["GET"]
+        action: allow
+        inject:
+          headers:
+            Authorization: "Bearer ${TEST_SECRET}"
+
+    telemetry:
+      logs:
+        level: debug
+        format: json

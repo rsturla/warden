@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: warden-mt
+  namespace: agent-sandbox
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: warden-mt
+  template:
+    metadata:
+      labels:
+        app: warden-mt
+    spec:
+      volumes:
+        - name: config
+          configMap:
+            name: warden-mt-config
+            items:
+              - key: config.yaml
+                path: config.yaml
+        - name: tenants
+          configMap:
+            name: warden-mt-tenants
+        - name: server-tls
+          secret:
+            secretName: warden-mt-server-tls
+        - name: tenant-ca
+          secret:
+            secretName: warden-mt-tenant-ca
+        - name: mitm-ca
+          secret:
+            secretName: warden-mt-mitm-ca
+      containers:
+        - name: warden
+          image: warden:latest
+          imagePullPolicy: Never
+          args: ["-config", "/etc/warden/config.yaml"]
+          envFrom:
+            - secretRef:
+                name: warden-mt-secrets
+          ports:
+            - containerPort: 8443
+              name: proxy
+            - containerPort: 9090
+              name: health
+          volumeMounts:
+            - name: config
+              mountPath: /etc/warden
+            - name: tenants
+              mountPath: /etc/warden/tenants.d
+            - name: server-tls
+              mountPath: /etc/warden/tls
+            - name: tenant-ca
+              mountPath: /etc/warden/tenant-ca
+            - name: mitm-ca
+              mountPath: /etc/warden/mitm
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 9090
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 9090
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: warden-mt
+  namespace: agent-sandbox
+spec:
+  selector:
+    app: warden-mt
+  ports:
+    - name: proxy
+      port: 8443
+      targetPort: proxy
+    - name: health
+      port: 9090
+      targetPort: health

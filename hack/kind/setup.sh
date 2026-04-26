@@ -78,12 +78,28 @@ info "Waiting for test server to be ready"
 kubectl wait --for=condition=Ready pod -l app=test-server \
   -n agent-sandbox --timeout=120s
 
+# Deploy multi-tenant Warden
+info "Generating mTLS certificates"
+"$SCRIPT_DIR/generate-certs.sh"
+
+info "Deploying multi-tenant Warden"
+kubectl apply -f "$SCRIPT_DIR/manifests/warden-mt-config.yaml"
+kubectl apply -f "$SCRIPT_DIR/manifests/warden-mt-deployment.yaml"
+
+info "Waiting for multi-tenant Warden to be ready"
+kubectl wait --for=condition=Ready pod -l app=warden-mt \
+  -n agent-sandbox --timeout=120s
+
 # Create Sandbox resources
 info "Creating test Sandbox"
 kubectl apply -f "$SCRIPT_DIR/manifests/sandbox.yaml"
 
 info "Creating SandboxTemplate and SandboxClaim"
 kubectl apply -f "$SCRIPT_DIR/manifests/sandbox-template.yaml"
+
+info "Creating multi-tenant agent sandboxes"
+kubectl apply -f "$SCRIPT_DIR/manifests/sandbox-alpha.yaml"
+kubectl apply -f "$SCRIPT_DIR/manifests/sandbox-beta.yaml"
 
 info "Waiting for sandbox pods"
 for i in $(seq 1 30); do
@@ -93,6 +109,18 @@ for i in $(seq 1 30); do
   sleep 2
 done
 kubectl wait --for=condition=Ready pod test-agent \
+  -n agent-sandbox --timeout=120s
+
+# Wait for MT agent pods
+for TENANT in alpha beta; do
+  for i in $(seq 1 30); do
+    if kubectl -n agent-sandbox get pod "agent-$TENANT" &>/dev/null; then
+      break
+    fi
+    sleep 2
+  done
+done
+kubectl wait --for=condition=Ready pod agent-alpha agent-beta \
   -n agent-sandbox --timeout=120s
 
 info ""

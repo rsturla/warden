@@ -26,6 +26,7 @@ type MetricAttr struct {
 }
 
 type RequestLog struct {
+	TenantID        string
 	ClientIP        string
 	Host            string
 	Method          string

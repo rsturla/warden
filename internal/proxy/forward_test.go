@@ -23,8 +23,7 @@ func startProxyWithDenylist(t *testing.T, rules []config.PolicyRule, secretVals 
 
 	p := New(Config{
 		CA:        ca,
-		Policy:    engine,
-		Secrets:   chain,
+		Tenants:   NewSingleTenantResolver(engine, chain),
 		Resolver:  resolver,
 		Denylist:  denylist,
 		Telemetry: &collectExporter{},

@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"sync"
 	"testing"
+	"time"
 
 	wardenca "github.com/rsturla/warden/internal/ca"
 	"github.com/rsturla/warden/internal/config"
@@ -41,8 +42,7 @@ func startProxy(t *testing.T, rules []config.PolicyRule, secretVals map[string]s
 
 	proxy := New(Config{
 		CA:        ca,
-		Policy:    engine,
-		Secrets:   chain,
+		Tenants:   NewSingleTenantResolver(engine, chain),
 		Resolver:  resolver,
 		Denylist:  denylist,
 		Telemetry: exp,
@@ -88,6 +88,21 @@ func (e *collectExporter) getEntries() []telemetry.RequestLog {
 	return cp
 }
 
+func (e *collectExporter) waitForEntries(t *testing.T, n int) []telemetry.RequestLog {
+	t.Helper()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		entries := e.getEntries()
+		if len(entries) >= n {
+			return entries
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %d log entries, got %d", n, len(entries))
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
 func TestForwardHTTPAllow(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("hello from upstream"))
@@ -117,11 +132,9 @@ func TestForwardHTTPAllow(t *testing.T) {
 		t.Errorf("body = %q", body)
 	}
 
-	if len(exp.getEntries()) != 1 {
-		t.Fatalf("expected 1 log entry, got %d", len(exp.getEntries()))
-	}
-	if exp.getEntries()[0].Action != "allow" {
-		t.Errorf("action = %q", exp.getEntries()[0].Action)
+	entries := exp.waitForEntries(t, 1)
+	if entries[0].Action != "allow" {
+		t.Errorf("action = %q", entries[0].Action)
 	}
 }
 
@@ -144,7 +157,8 @@ func TestForwardHTTPDeny(t *testing.T) {
 	if resp.StatusCode != 403 {
 		t.Errorf("status = %d, want 403", resp.StatusCode)
 	}
-	if len(exp.getEntries()) != 1 || exp.getEntries()[0].Action != "deny" {
+	entries := exp.waitForEntries(t, 1)
+	if entries[0].Action != "deny" {
 		t.Error("expected deny log entry")
 	}
 }
@@ -237,8 +251,7 @@ func startProxyWithUpstreamTrust(t *testing.T, rules []config.PolicyRule, secret
 
 	p := New(Config{
 		CA:        ca,
-		Policy:    engine,
-		Secrets:   chain,
+		Tenants:   NewSingleTenantResolver(engine, chain),
 		Resolver:  resolver,
 		Denylist:  denylist,
 		Telemetry: exp,
@@ -352,9 +365,9 @@ func TestConnectHTTPSDeny(t *testing.T) {
 
 	resp, err := client.Get("https://denied.example.com/test")
 	if err != nil {
-		// CONNECT succeeds but inner request gets 403 which may cause client error
-		if len(exp.getEntries()) > 0 && exp.getEntries()[0].Action == "deny" {
-			return
+		entries := exp.waitForEntries(t, 1)
+		if entries[0].Action != "deny" {
+			t.Errorf("expected deny, got %q", entries[0].Action)
 		}
 		return
 	}

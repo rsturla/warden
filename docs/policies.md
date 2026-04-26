@@ -104,6 +104,12 @@ inject:
 
 For HTTPS connections, Warden performs a fast check at the `CONNECT` stage — before the TLS handshake. If no allow rule could possibly match the requested host, Warden immediately returns `403` without spending resources on TLS. This is powered by `PolicyEngine.CanMatchHost()`.
 
+## Multi-Tenant Isolation
+
+In multi-tenant mode, each tenant has its own policy list defined in a separate config file (`tenants.d/<tenant-id>.yaml`). Policies are fully isolated — tenant A's rules cannot affect tenant B's requests. See [Configuration](configuration.md) for the per-tenant config format.
+
+Policy evaluation works identically per-tenant: first match wins, default deny. The tenant is resolved from the mTLS client certificate before any policy evaluation occurs.
+
 ## Security Considerations
 
 - **Default-deny**: no implicit allow. Every allowed endpoint must be explicitly listed.

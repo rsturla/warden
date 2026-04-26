@@ -1,0 +1,30 @@
+server:
+  listen: "0.0.0.0:8443"
+  health_listen: "0.0.0.0:9090"
+  tls:
+    cert: /etc/warden/server.crt
+    key: /etc/warden/server.key
+    client_ca: /etc/warden/tenant-ca.crt
+
+ca:
+  cert: /etc/warden/mitm-ca.crt
+  key: /etc/warden/mitm-ca.key
+
+dns:
+  servers: ["8.8.8.8:53"]
+  cache:
+    enabled: true
+    max_ttl: 300
+  deny_resolved_ips:
+    - "169.254.169.254/32"
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+    - "192.168.0.0/16"
+
+tenants:
+  dir: /etc/warden/tenants.d/
+
+telemetry:
+  logs:
+    level: info
+    format: json

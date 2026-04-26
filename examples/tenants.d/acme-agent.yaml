@@ -1,0 +1,21 @@
+policies:
+  - name: block-metadata
+    host: "169.254.169.254"
+    action: deny
+
+  - name: allow-github
+    host: "api.github.com"
+    path: "/repos/acme/**"
+    methods: ["GET", "POST"]
+    action: allow
+    inject:
+      headers:
+        Authorization: "Bearer ${GITHUB_TOKEN}"
+
+  - name: allow-pypi
+    host: "pypi.org"
+    methods: ["GET"]
+    action: allow
+
+secrets:
+  - type: env

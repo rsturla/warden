@@ -66,6 +66,20 @@ func NewOTELExporter(cfg OTELConfig) *OTELExporter {
 }
 
 func (e *OTELExporter) LogRequest(ctx context.Context, entry RequestLog) error {
+	spanAttrs := []otlpKeyValue{
+		{Key: "http.method", Value: otlpValue{StringValue: stringPtr(entry.Method)}},
+		{Key: "http.host", Value: otlpValue{StringValue: stringPtr(entry.Host)}},
+		{Key: "http.target", Value: otlpValue{StringValue: stringPtr(entry.Path)}},
+		{Key: "warden.action", Value: otlpValue{StringValue: stringPtr(entry.Action)}},
+		{Key: "warden.policy", Value: otlpValue{StringValue: stringPtr(entry.Policy)}},
+		{Key: "net.peer.ip", Value: otlpValue{StringValue: stringPtr(entry.ClientIP)}},
+	}
+	if entry.TenantID != "" {
+		spanAttrs = append(spanAttrs, otlpKeyValue{
+			Key: "warden.tenant_id", Value: otlpValue{StringValue: stringPtr(entry.TenantID)},
+		})
+	}
+
 	span := otlpSpan{
 		TraceID:           e.traceID,
 		SpanID:            generateSpanID(),
@@ -73,14 +87,7 @@ func (e *OTELExporter) LogRequest(ctx context.Context, entry RequestLog) error {
 		Kind:              3, // SERVER
 		StartTimeUnixNano: time.Now().Add(-time.Duration(entry.DurationMs) * time.Millisecond).UnixNano(),
 		EndTimeUnixNano:   time.Now().UnixNano(),
-		Attributes: []otlpKeyValue{
-			{Key: "http.method", Value: otlpValue{StringValue: stringPtr(entry.Method)}},
-			{Key: "http.host", Value: otlpValue{StringValue: stringPtr(entry.Host)}},
-			{Key: "http.target", Value: otlpValue{StringValue: stringPtr(entry.Path)}},
-			{Key: "warden.action", Value: otlpValue{StringValue: stringPtr(entry.Action)}},
-			{Key: "warden.policy", Value: otlpValue{StringValue: stringPtr(entry.Policy)}},
-			{Key: "net.peer.ip", Value: otlpValue{StringValue: stringPtr(entry.ClientIP)}},
-		},
+		Attributes:        spanAttrs,
 	}
 
 	if entry.UpstreamStatus > 0 {
@@ -323,6 +330,9 @@ func (e *OTELExporter) recordRequestMetrics(entry RequestLog) {
 	attrs := []MetricAttr{
 		{Key: "http.method", Value: entry.Method},
 		{Key: "warden.action", Value: entry.Action},
+	}
+	if entry.TenantID != "" {
+		attrs = append(attrs, MetricAttr{Key: "warden.tenant_id", Value: entry.TenantID})
 	}
 	e.RecordMetric(ctx, "warden.requests.total", 1, attrs...)
 	e.RecordMetric(ctx, "warden.request.duration_ms", float64(entry.DurationMs), attrs...)

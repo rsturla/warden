@@ -110,6 +110,11 @@ func (p *Proxy) handleDecryptedRequest(clientConn net.Conn, req *http.Request, h
 		return
 	}
 
+	if decision.Intercept != nil {
+		p.handleInterceptConnect(clientConn, req, decision, rt, start)
+		return
+	}
+
 	var injectResult *inject.Result
 	if decision.Inject != nil {
 		injectResult, err = inject.Apply(ctx, req, decision.Inject, rt.secrets)

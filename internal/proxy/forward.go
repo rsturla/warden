@@ -43,6 +43,11 @@ func (p *Proxy) handleForward(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if decision.Intercept != nil {
+		p.handleInterceptForward(w, r, decision, rt, start)
+		return
+	}
+
 	var injectResult *inject.Result
 	if decision.Inject != nil {
 		injectResult, err = inject.Apply(ctx, r, decision.Inject, rt.secrets)

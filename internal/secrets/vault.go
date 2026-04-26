@@ -2,7 +2,6 @@ package secrets
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/rsturla/warden/internal/config"
@@ -33,6 +31,15 @@ func init() {
 			Auth:    auth,
 		})
 	})
+	config.RegisterSecretValidator("vault", func(cfg config.SecretConfig) error {
+		if cfg.Vault.Address == "" {
+			return fmt.Errorf("secret source 'vault' requires address")
+		}
+		if cfg.Vault.Auth != "" && cfg.Vault.Auth != "token" && cfg.Vault.Auth != "kubernetes" {
+			return fmt.Errorf("secret source 'vault': auth must be 'token' or 'kubernetes', got %q", cfg.Vault.Auth)
+		}
+		return nil
+	})
 }
 
 type VaultConfig struct {
@@ -47,11 +54,8 @@ type VaultSource struct {
 	baseURL *url.URL
 	mount   string
 	prefix  string
-
-	mu     sync.RWMutex
-	token  string
-	expiry time.Time
-	authFn func(ctx context.Context) (string, time.Duration, error)
+	cache   *tokenCache
+	authFn  func(ctx context.Context) (string, time.Duration, error)
 }
 
 func NewVaultSource(cfg VaultConfig) (*VaultSource, error) {
@@ -64,17 +68,11 @@ func NewVaultSource(cfg VaultConfig) (*VaultSource, error) {
 	}
 
 	s := &VaultSource{
-		client: &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{
-					MinVersion: tls.VersionTLS12,
-				},
-			},
-		},
+		client:  newSecureHTTPClient(),
 		baseURL: parsed,
 		mount:   cfg.Mount,
 		prefix:  cfg.Prefix,
+		cache:   newTokenCache(30 * time.Second),
 	}
 
 	switch cfg.Auth {
@@ -152,32 +150,17 @@ func (s *VaultSource) Resolve(ctx context.Context, name string) (string, bool, e
 }
 
 func (s *VaultSource) getToken(ctx context.Context) (string, error) {
-	s.mu.RLock()
-	if s.token != "" && (s.expiry.IsZero() || time.Now().Before(s.expiry.Add(-30*time.Second))) {
-		token := s.token
-		s.mu.RUnlock()
-		return token, nil
-	}
-	s.mu.RUnlock()
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.token != "" && (s.expiry.IsZero() || time.Now().Before(s.expiry.Add(-30*time.Second))) {
-		return s.token, nil
-	}
-
-	token, ttl, err := s.authFn(ctx)
-	if err != nil {
-		return "", err
-	}
-	s.token = token
-	if ttl > 0 {
-		s.expiry = time.Now().Add(ttl)
-	} else {
-		s.expiry = time.Time{}
-	}
-	return token, nil
+	return s.cache.GetOrRefresh(ctx, func(ctx context.Context) (string, time.Time, error) {
+		token, ttl, err := s.authFn(ctx)
+		if err != nil {
+			return "", time.Time{}, err
+		}
+		var expiry time.Time
+		if ttl > 0 {
+			expiry = time.Now().Add(ttl)
+		}
+		return token, expiry, nil
+	})
 }
 
 func (s *VaultSource) kubernetesLogin(ctx context.Context) (string, time.Duration, error) {

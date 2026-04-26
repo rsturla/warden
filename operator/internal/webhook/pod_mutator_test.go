@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"testing"
 
-	jsonpatch "github.com/evanphx/json-patch/v5"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -79,27 +79,22 @@ func applyPatch(t *testing.T, original *corev1.Pod, resp admission.Response) *co
 		t.Fatal(err)
 	}
 
-	if len(resp.Patches) == 0 {
-		var p corev1.Pod
-		if err := json.Unmarshal(raw, &p); err != nil {
-			t.Fatal(err)
-		}
-		return &p
+	// Re-encode the original through the webhook's admission response mechanism:
+	// marshal the patched JSON (original + patches applied by controller-runtime).
+	// controller-runtime already applies patches internally when building the response,
+	// so we rebuild the pod from the raw object and apply patches via map manipulation.
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		t.Fatal(err)
 	}
 
-	patchBytes, err := json.Marshal(resp.Patches)
-	if err != nil {
-		t.Fatalf("marshaling patches: %v", err)
+	for _, p := range resp.Patches {
+		applyJSONPatchOp(t, obj, p.Operation, p.Path, p.Value)
 	}
 
-	patch, err := jsonpatch.DecodePatch(patchBytes)
+	patched, err := json.Marshal(obj)
 	if err != nil {
-		t.Fatalf("decoding patch: %v", err)
-	}
-
-	patched, err := patch.Apply(raw)
-	if err != nil {
-		t.Fatalf("applying patch: %v", err)
+		t.Fatal(err)
 	}
 
 	var pod corev1.Pod
@@ -107,6 +102,105 @@ func applyPatch(t *testing.T, original *corev1.Pod, resp admission.Response) *co
 		t.Fatalf("unmarshaling patched pod: %v", err)
 	}
 	return &pod
+}
+
+func applyJSONPatchOp(t *testing.T, obj map[string]any, op, path string, value any) {
+	t.Helper()
+	parts := splitJSONPointer(path)
+	if len(parts) == 0 {
+		t.Fatalf("empty JSON pointer path: %q", path)
+	}
+
+	var current any = obj
+	for _, key := range parts[:len(parts)-1] {
+		current = traverseJSON(t, current, key, path)
+	}
+
+	last := parts[len(parts)-1]
+	switch parent := current.(type) {
+	case map[string]any:
+		switch op {
+		case "add":
+			if existing, ok := parent[last]; ok {
+				if arr, ok := existing.([]any); ok {
+					parent[last] = append(arr, value)
+					return
+				}
+			}
+			parent[last] = value
+		case "replace":
+			parent[last] = value
+		case "remove":
+			delete(parent, last)
+		}
+	case []any:
+		idx, err := strconv.Atoi(last)
+		if err != nil {
+			t.Fatalf("non-numeric array index %q in path %q", last, path)
+		}
+		switch op {
+		case "add":
+			if idx == len(parent) {
+				setArrayInParent(t, obj, parts[:len(parts)-1], append(parent, value))
+			} else {
+				expanded := append(parent[:idx+1], parent[idx:]...)
+				expanded[idx] = value
+				setArrayInParent(t, obj, parts[:len(parts)-1], expanded)
+			}
+		case "replace":
+			parent[idx] = value
+		case "remove":
+			setArrayInParent(t, obj, parts[:len(parts)-1], append(parent[:idx], parent[idx+1:]...))
+		}
+	default:
+		t.Fatalf("cannot apply op to %T at path %q", current, path)
+	}
+}
+
+func traverseJSON(t *testing.T, current any, key, fullPath string) any {
+	t.Helper()
+	switch v := current.(type) {
+	case map[string]any:
+		return v[key]
+	case []any:
+		idx, err := strconv.Atoi(key)
+		if err != nil {
+			t.Fatalf("non-numeric array index %q in path %q", key, fullPath)
+		}
+		return v[idx]
+	default:
+		t.Fatalf("cannot traverse path %q at key %q (type %T)", fullPath, key, current)
+		return nil
+	}
+}
+
+func setArrayInParent(t *testing.T, root map[string]any, pathToArray []string, arr []any) {
+	t.Helper()
+	var current any = root
+	for _, key := range pathToArray[:len(pathToArray)-1] {
+		current = traverseJSON(t, current, key, "")
+	}
+	parent := current.(map[string]any)
+	parent[pathToArray[len(pathToArray)-1]] = arr
+}
+
+func splitJSONPointer(path string) []string {
+	if path == "" || path == "/" {
+		return nil
+	}
+	if path[0] == '/' {
+		path = path[1:]
+	}
+	var result []string
+	start := 0
+	for i := 0; i < len(path); i++ {
+		if path[i] == '/' {
+			result = append(result, path[start:i])
+			start = i + 1
+		}
+	}
+	result = append(result, path[start:])
+	return result
 }
 
 func TestPodMutator_NoLabel(t *testing.T) {
@@ -159,7 +253,7 @@ func TestPodMutator_InjectsBridge(t *testing.T) {
 	patched := applyPatch(t, pod, resp)
 
 	var foundBridge bool
-	for _, c := range patched.Spec.Containers {
+	for _, c := range patched.Spec.InitContainers {
 		if c.Name == bridgeName {
 			foundBridge = true
 			if c.Image != "warden:latest" {
@@ -170,6 +264,9 @@ func TestPodMutator_InjectsBridge(t *testing.T) {
 			}
 			if len(c.VolumeMounts) == 0 {
 				t.Error("bridge has no volume mounts")
+			}
+			if c.RestartPolicy == nil || *c.RestartPolicy != corev1.ContainerRestartPolicyAlways {
+				t.Error("bridge should have RestartPolicy=Always (native sidecar)")
 			}
 		}
 	}
@@ -286,10 +383,8 @@ func TestPodMutator_Idempotent(t *testing.T) {
 			},
 		},
 		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{Name: "app", Image: "test:latest"},
-				{Name: bridgeName, Image: "warden:latest"},
-			},
+			Containers:     []corev1.Container{{Name: "app", Image: "test:latest"}},
+			InitContainers: []corev1.Container{{Name: bridgeName, Image: "warden:latest"}},
 		},
 	}
 
@@ -397,14 +492,14 @@ func TestPodMutator_MultipleContainers(t *testing.T) {
 	resp := m.Handle(context.Background(), admissionRequest(t, pod, "default"))
 	patched := applyPatch(t, pod, resp)
 
-	if len(patched.Spec.Containers) != 3 {
-		t.Fatalf("expected 3 containers (app1 + app2 + bridge), got %d", len(patched.Spec.Containers))
+	if len(patched.Spec.Containers) != 2 {
+		t.Fatalf("expected 2 containers (app1 + app2), got %d", len(patched.Spec.Containers))
+	}
+	if len(patched.Spec.InitContainers) != 1 || patched.Spec.InitContainers[0].Name != bridgeName {
+		t.Fatalf("expected 1 init container (bridge), got %d", len(patched.Spec.InitContainers))
 	}
 
 	for _, c := range patched.Spec.Containers {
-		if c.Name == bridgeName {
-			continue
-		}
 		var found bool
 		for _, e := range c.Env {
 			if e.Name == "HTTP_PROXY" {

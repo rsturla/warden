@@ -31,13 +31,10 @@ func TestSerializeTenantConfig_RoundTrip(t *testing.T) {
 					Action: "deny",
 				},
 			},
-			Secrets: []api.SecretConfig{
-				{Type: "env"},
-			},
 		},
 	}
 
-	yamlStr, err := serializeTenantConfig(tenantCR)
+	yamlStr, err := serializeTenantConfigWithSecrets(tenantCR, []map[string]any{{"type": "env"}})
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -90,7 +87,7 @@ func TestSerializeTenantConfig_EmptySecrets(t *testing.T) {
 		},
 	}
 
-	yamlStr, err := serializeTenantConfig(tenantCR)
+	yamlStr, err := serializeTenantConfigWithSecrets(tenantCR, nil)
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -112,20 +109,17 @@ func TestSerializeTenantConfig_VaultSecret(t *testing.T) {
 			Policies: []api.PolicyRule{
 				{Name: "allow", Host: "api.example.com", Action: "allow"},
 			},
-			Secrets: []api.SecretConfig{
-				{
-					Type: "vault",
-					Vault: api.VaultSecretConfig{
-						Address: "https://vault.example.com",
-						Mount:   "secret",
-						Auth:    "kubernetes",
-					},
-				},
-			},
 		},
 	}
 
-	yamlStr, err := serializeTenantConfig(tenantCR)
+	rawSecrets := []map[string]any{{
+		"type":    "vault",
+		"address": "https://vault.example.com",
+		"mount":   "secret",
+		"auth":    "kubernetes",
+	}}
+
+	yamlStr, err := serializeTenantConfigWithSecrets(tenantCR, rawSecrets)
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -160,11 +154,10 @@ func TestSerializeTenantConfig_InjectQuery(t *testing.T) {
 					},
 				},
 			},
-			Secrets: []api.SecretConfig{{Type: "env"}},
 		},
 	}
 
-	yamlStr, err := serializeTenantConfig(tenantCR)
+	yamlStr, err := serializeTenantConfigWithSecrets(tenantCR, []map[string]any{{"type": "env"}})
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -182,10 +175,89 @@ func TestSerializeTenantConfig_InjectQuery(t *testing.T) {
 	}
 }
 
+func TestSerializeTenantConfig_Intercept(t *testing.T) {
+	tenantCR := &wardenio.Tenant{
+		ObjectMeta: metav1.ObjectMeta{Name: "gcp-intercept"},
+		Spec: wardenio.TenantSpec{
+			Policies: []api.PolicyRule{
+				{
+					Name:    "intercept-gcp-token",
+					Host:    "oauth2.googleapis.com",
+					Path:    "/token",
+					Methods: []string{"POST"},
+					Action:  "allow",
+					Intercept: &api.InterceptConfig{
+						Credential: "GCP_ACCESS_TOKEN",
+					},
+				},
+				{
+					Name:   "allow-gcp-api",
+					Host:   "*.googleapis.com",
+					Action: "allow",
+					Inject: &api.InjectConfig{
+						Headers: map[string]string{"Authorization": "Bearer ${GCP_ACCESS_TOKEN}"},
+					},
+				},
+			},
+		},
+	}
+
+	rawSecrets := []map[string]any{{
+		"type":             "gcp-service-account",
+		"credentials_file": "/etc/warden/sa-key.json",
+		"token_name":       "GCP_ACCESS_TOKEN",
+	}}
+
+	yamlStr, err := serializeTenantConfigWithSecrets(tenantCR, rawSecrets)
+	if err != nil {
+		t.Fatalf("serialize: %v", err)
+	}
+
+	tc, err := tenant.ParseTenantConfig([]byte(yamlStr))
+	if err != nil {
+		t.Fatalf("ParseTenantConfig: %v\nYAML:\n%s", err, yamlStr)
+	}
+
+	if len(tc.Policies) != 2 {
+		t.Fatalf("expected 2 policies, got %d", len(tc.Policies))
+	}
+
+	p := tc.Policies[0]
+	if p.Intercept == nil {
+		t.Fatal("intercept should not be nil")
+	}
+	if p.Intercept.Credential != "GCP_ACCESS_TOKEN" {
+		t.Errorf("credential = %q", p.Intercept.Credential)
+	}
+	if p.Inject != nil {
+		t.Error("inject should be nil on intercept rule")
+	}
+
+	p2 := tc.Policies[1]
+	if p2.Inject == nil {
+		t.Fatal("inject should not be nil on second rule")
+	}
+	if p2.Intercept != nil {
+		t.Error("intercept should be nil on inject rule")
+	}
+
+	if len(tc.Secrets) != 1 || tc.Secrets[0].Type != "gcp-service-account" {
+		t.Errorf("secrets = %+v", tc.Secrets)
+	}
+	if tc.Secrets[0].GCP.CredentialsFile != "/etc/warden/sa-key.json" {
+		t.Errorf("credentials_file = %q", tc.Secrets[0].GCP.CredentialsFile)
+	}
+	if tc.Secrets[0].GCP.TokenName != "GCP_ACCESS_TOKEN" {
+		t.Errorf("token_name = %q", tc.Secrets[0].GCP.TokenName)
+	}
+}
+
 func FuzzSerializeTenantConfig(f *testing.F) {
 	f.Add("test-policy", "*.example.com", "/api/**", "allow", "env")
 	f.Add("deny-meta", "169.254.169.254", "/**", "deny", "")
 	f.Add("special-chars", "api.example.com", "/path/with spaces", "allow", "vault")
+	f.Add("gcp-token", "oauth2.googleapis.com", "/token", "allow", "gcp-service-account")
+	f.Add("gcp-user", "oauth2.googleapis.com", "/token", "allow", "gcp-authorized-user")
 
 	f.Fuzz(func(t *testing.T, name, host, path, action, secretType string) {
 		if name == "" || host == "" || action == "" {
@@ -204,11 +276,12 @@ func FuzzSerializeTenantConfig(f *testing.F) {
 			},
 		}
 
-		if secretType == "env" || secretType == "file" || secretType == "vault" || secretType == "kubernetes" {
-			tenantCR.Spec.Secrets = []api.SecretConfig{{Type: secretType}}
+		var rawSecrets []map[string]any
+		if secretType == "env" || secretType == "file" || secretType == "vault" || secretType == "kubernetes" || secretType == "gcp-service-account" || secretType == "gcp-authorized-user" {
+			rawSecrets = []map[string]any{{"type": secretType}}
 		}
 
-		yamlStr, err := serializeTenantConfig(tenantCR)
+		yamlStr, err := serializeTenantConfigWithSecrets(tenantCR, rawSecrets)
 		if err != nil {
 			return
 		}

@@ -14,6 +14,8 @@ import (
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+
 	wardenio "github.com/rsturla/warden/operator/api/v1alpha1"
 	"github.com/rsturla/warden/operator/internal/controller"
 	"github.com/rsturla/warden/operator/internal/webhook"
@@ -26,6 +28,7 @@ var (
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
+	utilruntime.Must(certmanagerv1.AddToScheme(scheme))
 	utilruntime.Must(wardenio.AddToScheme(scheme))
 }
 

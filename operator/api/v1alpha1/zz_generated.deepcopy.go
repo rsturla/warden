@@ -6,6 +6,7 @@ package v1alpha1
 
 import (
 	"github.com/rsturla/warden/pkg/api"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
@@ -349,6 +350,20 @@ func (in *WardenProxySpec) DeepCopyInto(out *WardenProxySpec) {
 		in, out := &in.Telemetry, &out.Telemetry
 		*out = new(TelemetrySpec)
 		(*in).DeepCopyInto(*out)
+	}
+	if in.ExtraVolumes != nil {
+		in, out := &in.ExtraVolumes, &out.ExtraVolumes
+		*out = make([]corev1.Volume, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
+	}
+	if in.ExtraVolumeMounts != nil {
+		in, out := &in.ExtraVolumeMounts, &out.ExtraVolumeMounts
+		*out = make([]corev1.VolumeMount, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 	if in.Policies != nil {
 		in, out := &in.Policies, &out.Policies

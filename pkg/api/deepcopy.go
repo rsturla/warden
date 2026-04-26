@@ -10,6 +10,10 @@ func (in *PolicyRule) DeepCopyInto(out *PolicyRule) {
 		out.Inject = new(InjectConfig)
 		in.Inject.DeepCopyInto(out.Inject)
 	}
+	if in.Intercept != nil {
+		out.Intercept = new(InterceptConfig)
+		*out.Intercept = *in.Intercept
+	}
 }
 
 func (in *PolicyRule) DeepCopy() *PolicyRule {
@@ -39,6 +43,10 @@ func (in *InjectConfig) DeepCopyInto(out *InjectConfig) {
 
 func (in *SecretConfig) DeepCopyInto(out *SecretConfig) {
 	*out = *in
+	if in.GCP.Scopes != nil {
+		out.GCP.Scopes = make([]string, len(in.GCP.Scopes))
+		copy(out.GCP.Scopes, in.GCP.Scopes)
+	}
 }
 
 func (in *SecretConfig) DeepCopy() *SecretConfig {

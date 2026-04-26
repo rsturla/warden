@@ -18,6 +18,8 @@ type FileSecretConfig = api.FileSecretConfig
 type VaultSecretConfig = api.VaultSecretConfig
 type K8sSecretConfig = api.K8sSecretConfig
 type GitHubAppSecretConfig = api.GitHubAppSecretConfig
+type InterceptConfig = api.InterceptConfig
+type GCPSecretConfig = api.GCPSecretConfig
 
 type Config struct {
 	Server    ServerConfig    `yaml:"server"`
@@ -157,6 +159,15 @@ func (c *Config) Validate() error {
 		if action == "deny" && p.Inject != nil {
 			return fmt.Errorf("policy %q: deny rules cannot have inject", p.Name)
 		}
+		if action == "deny" && p.Intercept != nil {
+			return fmt.Errorf("policy %q: deny rules cannot have intercept", p.Name)
+		}
+		if p.Inject != nil && p.Intercept != nil {
+			return fmt.Errorf("policy %q: inject and intercept are mutually exclusive", p.Name)
+		}
+		if p.Intercept != nil && p.Intercept.Credential == "" {
+			return fmt.Errorf("policy %q: intercept requires credential", p.Name)
+		}
 		for _, m := range p.Methods {
 			if m != strings.ToUpper(m) {
 				return fmt.Errorf("policy %q: method %q should be uppercase", p.Name, m)
@@ -164,32 +175,8 @@ func (c *Config) Validate() error {
 		}
 	}
 	for _, s := range c.Secrets {
-		switch s.Type {
-		case "env":
-		case "file":
-			if s.File.Path == "" {
-				return fmt.Errorf("secret source 'file' requires path")
-			}
-		case "vault":
-			if s.Vault.Address == "" {
-				return fmt.Errorf("secret source 'vault' requires address")
-			}
-			if s.Vault.Auth != "" && s.Vault.Auth != "token" && s.Vault.Auth != "kubernetes" {
-				return fmt.Errorf("secret source 'vault': auth must be 'token' or 'kubernetes', got %q", s.Vault.Auth)
-			}
-		case "kubernetes":
-		case "github-app":
-			if s.GitHubApp.AppID <= 0 {
-				return fmt.Errorf("secret source 'github-app' requires positive app_id")
-			}
-			if s.GitHubApp.InstallationID <= 0 {
-				return fmt.Errorf("secret source 'github-app' requires positive installation_id")
-			}
-			if s.GitHubApp.PrivateKeyPath == "" {
-				return fmt.Errorf("secret source 'github-app' requires private_key_path")
-			}
-		default:
-			return fmt.Errorf("secret source type %q not supported", s.Type)
+		if err := validateSecret(s); err != nil {
+			return err
 		}
 	}
 	if c.DNS.DoT.Enabled && c.DNS.DoT.Server == "" {

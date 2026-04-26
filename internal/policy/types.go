@@ -9,15 +9,20 @@ type RequestContext struct {
 }
 
 type PolicyDecision struct {
-	Allowed  bool
-	RuleName string
-	Reason   string
-	Inject   *InjectionDirective
+	Allowed   bool
+	RuleName  string
+	Reason    string
+	Inject    *InjectionDirective
+	Intercept *InterceptDirective
 }
 
 type InjectionDirective struct {
 	Headers map[string]string
 	Query   map[string]string
+}
+
+type InterceptDirective struct {
+	Credential string
 }
 
 type PolicyEngine interface {

@@ -113,7 +113,7 @@ func (r *TenantReconciler) reconcileDelete(ctx context.Context, tenant *wardenio
 }
 
 func (r *TenantReconciler) reconcileConfigMap(ctx context.Context, tenant *wardenio.Tenant, proxy *wardenio.WardenProxy) error {
-	tenantYAML, err := serializeTenantConfig(tenant)
+	tenantYAML, err := serializeTenantConfig(ctx, r.Client, tenant)
 	if err != nil {
 		return fmt.Errorf("serializing tenant config: %w", err)
 	}
@@ -168,7 +168,7 @@ func (r *TenantReconciler) removeTenantFromConfigMap(ctx context.Context, tenant
 
 func (r *TenantReconciler) reconcileCertificate(ctx context.Context, tenant *wardenio.Tenant, proxy *wardenio.WardenProxy) error {
 	certName := "warden-tenant-" + tenant.Name
-	issuer := proxy.Spec.MultiTenant.CertificateIssuerRef
+	tenantIssuerName := proxy.Name + "-tenant-issuer"
 
 	cert := &unstructured.Unstructured{}
 	cert.SetGroupVersionKind(schema.GroupVersionKind{
@@ -195,8 +195,8 @@ func (r *TenantReconciler) reconcileCertificate(ctx context.Context, tenant *war
 					"size":      int64(256),
 				},
 				"issuerRef": map[string]any{
-					"name": issuer.Name,
-					"kind": issuer.Kind,
+					"name": tenantIssuerName,
+					"kind": "Issuer",
 				},
 			},
 		}
@@ -236,7 +236,18 @@ func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func serializeTenantConfig(tenant *wardenio.Tenant) (string, error) {
+func serializeTenantConfig(ctx context.Context, c client.Client, tenant *wardenio.Tenant) (string, error) {
+	// The CRD uses json:",inline" for secret sub-configs, but controller-runtime's
+	// strict decoder doesn't populate inline fields. Extract secrets from the raw
+	// tenant JSON instead of relying on Go struct deserialization.
+	rawSecrets, err := extractRawSecrets(ctx, c, tenant)
+	if err != nil {
+		return "", fmt.Errorf("extracting secrets: %w", err)
+	}
+	return serializeTenantConfigWithSecrets(tenant, rawSecrets)
+}
+
+func serializeTenantConfigWithSecrets(tenant *wardenio.Tenant, rawSecrets []map[string]any) (string, error) {
 	policies := make([]api.PolicyRule, len(tenant.Spec.Policies))
 	copy(policies, tenant.Spec.Policies)
 	for i := range policies {
@@ -255,9 +266,9 @@ func serializeTenantConfig(tenant *wardenio.Tenant) (string, error) {
 		}
 	}
 
-	tc := api.TenantConfig{
-		Policies: policies,
-		Secrets:  tenant.Spec.Secrets,
+	tc := map[string]any{
+		"policies": policies,
+		"secrets":  rawSecrets,
 	}
 	data, err := yaml.Marshal(tc)
 	if err != nil {
@@ -273,6 +284,57 @@ func sanitizeField(s string) string {
 		}
 		return r
 	}, s)
+}
+
+// extractRawSecrets reads the tenant's secrets directly from the raw JSON
+// stored by the API server, bypassing Go struct deserialization which doesn't
+// handle json:",inline" properly with controller-runtime's strict decoder.
+func extractRawSecrets(ctx context.Context, c client.Client, tenant *wardenio.Tenant) ([]map[string]any, error) {
+	var raw unstructured.Unstructured
+	raw.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "wardenproxy.dev",
+		Version: "v1alpha1",
+		Kind:    "Tenant",
+	})
+	if err := c.Get(ctx, types.NamespacedName{Name: tenant.Name, Namespace: tenant.Namespace}, &raw); err != nil {
+		return nil, err
+	}
+
+	spec, ok := raw.Object["spec"].(map[string]any)
+	if !ok {
+		return nil, nil
+	}
+	secretsList, ok := spec["secrets"].([]any)
+	if !ok {
+		return nil, nil
+	}
+
+	// Convert JSON camelCase to YAML snake_case for proxy config.
+	jsonToYAML := map[string]string{
+		"credentialsFile": "credentials_file",
+		"tokenName":       "token_name",
+		"privateKeyPath":  "private_key_path",
+		"appId":           "app_id",
+		"installationId":  "installation_id",
+	}
+
+	result := make([]map[string]any, 0, len(secretsList))
+	for _, s := range secretsList {
+		sm, ok := s.(map[string]any)
+		if !ok {
+			continue
+		}
+		out := make(map[string]any)
+		for k, v := range sm {
+			if yamlKey, ok := jsonToYAML[k]; ok {
+				out[yamlKey] = v
+			} else {
+				out[k] = v
+			}
+		}
+		result = append(result, out)
+	}
+	return result, nil
 }
 
 func configMapName(proxy *wardenio.WardenProxy) string {

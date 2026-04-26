@@ -4,17 +4,22 @@
 package api
 
 type PolicyRule struct {
-	Name    string        `yaml:"name" json:"name"`
-	Host    string        `yaml:"host" json:"host"`
-	Path    string        `yaml:"path,omitempty" json:"path,omitempty"`
-	Methods []string      `yaml:"methods,omitempty" json:"methods,omitempty"`
-	Action  string        `yaml:"action" json:"action"`
-	Inject  *InjectConfig `yaml:"inject,omitempty" json:"inject,omitempty"`
+	Name      string           `yaml:"name" json:"name"`
+	Host      string           `yaml:"host" json:"host"`
+	Path      string           `yaml:"path,omitempty" json:"path,omitempty"`
+	Methods   []string         `yaml:"methods,omitempty" json:"methods,omitempty"`
+	Action    string           `yaml:"action" json:"action"`
+	Inject    *InjectConfig    `yaml:"inject,omitempty" json:"inject,omitempty"`
+	Intercept *InterceptConfig `yaml:"intercept,omitempty" json:"intercept,omitempty"`
 }
 
 type InjectConfig struct {
 	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
 	Query   map[string]string `yaml:"query,omitempty" json:"query,omitempty"`
+}
+
+type InterceptConfig struct {
+	Credential string `yaml:"credential" json:"credential"`
 }
 
 type SecretConfig struct {
@@ -23,6 +28,7 @@ type SecretConfig struct {
 	Vault      VaultSecretConfig     `yaml:",inline" json:",inline"`
 	Kubernetes K8sSecretConfig       `yaml:",inline" json:",inline"`
 	GitHubApp  GitHubAppSecretConfig `yaml:",inline" json:",inline"`
+	GCP        GCPSecretConfig       `yaml:",inline" json:",inline"`
 }
 
 type FileSecretConfig struct {
@@ -44,6 +50,12 @@ type GitHubAppSecretConfig struct {
 	AppID          int64  `yaml:"app_id,omitempty" json:"appId,omitempty"`
 	InstallationID int64  `yaml:"installation_id,omitempty" json:"installationId,omitempty"`
 	PrivateKeyPath string `yaml:"private_key_path,omitempty" json:"privateKeyPath,omitempty"`
+}
+
+type GCPSecretConfig struct {
+	CredentialsFile string   `yaml:"credentials_file,omitempty" json:"credentialsFile,omitempty"`
+	Scopes          []string `yaml:"scopes,omitempty" json:"scopes,omitempty"`
+	TokenName       string   `yaml:"token_name,omitempty" json:"tokenName,omitempty"`
 }
 
 type TenantConfig struct {

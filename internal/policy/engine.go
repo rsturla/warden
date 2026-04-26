@@ -16,6 +16,7 @@ type compiledRule struct {
 	methods   map[string]bool
 	action    string
 	inject    *InjectionDirective
+	intercept *InterceptDirective
 }
 
 type YAMLPolicyEngine struct {
@@ -50,6 +51,13 @@ func NewYAMLPolicyEngine(rules []config.PolicyRule) (*YAMLPolicyEngine, error) {
 			}
 		}
 
+		var intercept *InterceptDirective
+		if r.Intercept != nil {
+			intercept = &InterceptDirective{
+				Credential: r.Intercept.Credential,
+			}
+		}
+
 		compiled[i] = compiledRule{
 			name:      r.Name,
 			hostMatch: hostFn,
@@ -57,6 +65,7 @@ func NewYAMLPolicyEngine(rules []config.PolicyRule) (*YAMLPolicyEngine, error) {
 			methods:   methods,
 			action:    r.Action,
 			inject:    inject,
+			intercept: intercept,
 		}
 	}
 	return &YAMLPolicyEngine{rules: compiled}, nil
@@ -98,9 +107,10 @@ func (e *YAMLPolicyEngine) Evaluate(_ context.Context, req *RequestContext) (*Po
 			}, nil
 		}
 		return &PolicyDecision{
-			Allowed:  true,
-			RuleName: rule.name,
-			Inject:   rule.inject,
+			Allowed:   true,
+			RuleName:  rule.name,
+			Inject:    rule.inject,
+			Intercept: rule.intercept,
 		}, nil
 	}
 

@@ -100,6 +100,67 @@ inject:
 - If a referenced variable cannot be resolved, the request is **denied** (fail-closed). This prevents forwarding requests without required authentication.
 - `deny` rules cannot have `inject` blocks (rejected at config validation).
 
+## Credential Intercept
+
+Allow rules can include an `intercept` block to short-circuit the request and return a synthetic OAuth2 token response instead of forwarding to upstream. This enables transparent credential vending — agents and their SDKs call token endpoints as normal, but Warden resolves the credential locally and returns it without ever contacting the upstream provider.
+
+```yaml
+policies:
+  - name: gcp-token-intercept
+    host: "oauth2.googleapis.com"
+    path: "/token"
+    methods: ["POST"]
+    action: allow
+    intercept:
+      credential: GCP_ACCESS_TOKEN
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `credential` | yes | Secret variable name to resolve (e.g., `GCP_ACCESS_TOKEN`) |
+
+### Behavior
+
+- Warden resolves the credential from the tenant's [secret sources](secrets.md)
+- Returns an HTTP 200 with a standard OAuth2 token response:
+  ```json
+  {"access_token": "<resolved>", "token_type": "Bearer", "expires_in": 3600}
+  ```
+- **No upstream connection is made** — the request never leaves Warden
+- If credential resolution fails, the request is denied (fail-closed)
+- Logged with action `intercept` in telemetry
+
+### Constraints
+
+- `deny` rules cannot have `intercept`
+- `inject` and `intercept` are mutually exclusive on the same rule
+- `intercept` requires a non-empty `credential`
+
+### Use case
+
+Agent SDKs (Google Cloud, etc.) call token endpoints to obtain credentials before making API calls. Without intercept, the SDK would fail because the agent has no credentials. With intercept, the SDK receives a valid token from Warden, then makes API calls normally. Combine with `inject` on API endpoint rules for defense in depth:
+
+```yaml
+policies:
+  # Intercept token requests — SDK gets a token from Warden
+  - name: gcp-token
+    host: "oauth2.googleapis.com"
+    path: "/token"
+    methods: ["POST"]
+    action: allow
+    intercept:
+      credential: GCP_ACCESS_TOKEN
+
+  # Also inject auth on API calls — belt and suspenders
+  - name: gcp-api
+    host: "*.googleapis.com"
+    path: "/**"
+    action: allow
+    inject:
+      headers:
+        Authorization: "Bearer ${GCP_ACCESS_TOKEN}"
+```
+
 ## HTTPS Early Rejection
 
 For HTTPS connections, Warden performs a fast check at the `CONNECT` stage — before the TLS handshake. If no allow rule could possibly match the requested host, Warden immediately returns `403` without spending resources on TLS. This is powered by `PolicyEngine.CanMatchHost()`.

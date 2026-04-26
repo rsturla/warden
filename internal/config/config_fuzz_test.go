@@ -1,6 +1,11 @@
-package config
+package config_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/rsturla/warden/internal/config"
+	_ "github.com/rsturla/warden/internal/secrets"
+)
 
 func FuzzConfigParse(f *testing.F) {
 	f.Add([]byte(`policies: []`))
@@ -16,7 +21,6 @@ policies:
 	f.Add([]byte(``))
 
 	f.Fuzz(func(t *testing.T, data []byte) {
-		// Must not panic regardless of input
-		Parse(data)
+		config.Parse(data)
 	})
 }

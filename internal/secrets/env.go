@@ -11,6 +11,7 @@ func init() {
 	Register("env", func(_ config.SecretConfig) (SecretSource, error) {
 		return NewEnvSource(), nil
 	})
+	config.RegisterSecretValidator("env", nil)
 }
 
 type EnvSource struct{}

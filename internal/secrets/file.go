@@ -3,6 +3,7 @@ package secrets
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io/fs"
 	"os"
 	"strings"
@@ -13,6 +14,12 @@ import (
 func init() {
 	Register("file", func(cfg config.SecretConfig) (SecretSource, error) {
 		return NewFileSource(cfg.File.Path)
+	})
+	config.RegisterSecretValidator("file", func(cfg config.SecretConfig) error {
+		if cfg.File.Path == "" {
+			return fmt.Errorf("secret source 'file' requires path")
+		}
+		return nil
 	})
 }
 

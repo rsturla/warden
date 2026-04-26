@@ -55,6 +55,7 @@ type GitHubAppSecretConfig struct {
 type GCPServiceAccountSecretConfig struct {
 	CredentialsFile string   `yaml:"credentials_file,omitempty" json:"credentialsFile,omitempty"`
 	Scopes          []string `yaml:"scopes,omitempty" json:"scopes,omitempty"`
+	TokenName       string   `yaml:"token_name,omitempty" json:"tokenName,omitempty"`
 }
 
 type TenantConfig struct {

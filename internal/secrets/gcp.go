@@ -23,6 +23,7 @@ func init() {
 		return NewGCPServiceAccountSource(GCPServiceAccountConfig{
 			CredentialsFile: cfg.GCPServiceAccount.CredentialsFile,
 			Scopes:          cfg.GCPServiceAccount.Scopes,
+			TokenName:       cfg.GCPServiceAccount.TokenName,
 		})
 	})
 	config.RegisterSecretValidator("gcp-service-account", nil)
@@ -31,22 +32,30 @@ func init() {
 type GCPServiceAccountConfig struct {
 	CredentialsFile string
 	Scopes          []string
+	TokenName       string // variable name to respond to (default: GCP_ACCESS_TOKEN)
 	TokenURL        string // override for testing
 }
 
 type GCPServiceAccountSource struct {
-	client   *http.Client
-	cache    *tokenCache
-	key      *rsa.PrivateKey // nil = metadata mode
-	email    string
-	scopes   string
-	tokenURL string
+	client    *http.Client
+	cache     *tokenCache
+	tokenName string
+	key       *rsa.PrivateKey // nil = metadata mode
+	email     string
+	scopes    string
+	tokenURL  string
 }
 
 func NewGCPServiceAccountSource(cfg GCPServiceAccountConfig) (*GCPServiceAccountSource, error) {
+	tokenName := cfg.TokenName
+	if tokenName == "" {
+		tokenName = "GCP_ACCESS_TOKEN"
+	}
+
 	s := &GCPServiceAccountSource{
-		client: newSecureHTTPClient(),
-		cache:  newTokenCache(5 * time.Minute),
+		client:    newSecureHTTPClient(),
+		cache:     newTokenCache(5 * time.Minute),
+		tokenName: tokenName,
 	}
 
 	if cfg.CredentialsFile != "" {
@@ -115,7 +124,7 @@ func (s *GCPServiceAccountSource) loadCredentials(cfg GCPServiceAccountConfig) e
 func (s *GCPServiceAccountSource) Name() string { return "gcp-service-account" }
 
 func (s *GCPServiceAccountSource) Resolve(ctx context.Context, name string) (string, bool, error) {
-	if name != "GCP_ACCESS_TOKEN" {
+	if name != s.tokenName {
 		return "", false, nil
 	}
 

@@ -199,10 +199,28 @@ secrets:
 |-------|----------|---------|-------------|
 | `credentials_file` | no | — | Path to service account key JSON. If omitted, uses GCE metadata server |
 | `scopes` | no | `cloud-platform` | OAuth2 scopes (used with credentials file only) |
+| `token_name` | no | `GCP_ACCESS_TOKEN` | Variable name this source responds to |
 
 ### Variable name
 
-This source responds only to the variable name `GCP_ACCESS_TOKEN`. All other names return not-found.
+By default, this source responds to `GCP_ACCESS_TOKEN`. Use `token_name` to configure a custom name — useful when multiple service accounts serve different APIs:
+
+```yaml
+secrets:
+  - type: gcp-service-account
+    credentials_file: /etc/warden/vertex-sa.json
+    token_name: GCP_VERTEX_TOKEN
+    scopes:
+      - https://www.googleapis.com/auth/cloud-platform
+
+  - type: gcp-service-account
+    credentials_file: /etc/warden/docs-sa.json
+    token_name: GCP_DOCS_TOKEN
+    scopes:
+      - https://www.googleapis.com/auth/documents
+```
+
+Each source instance responds only to its own `token_name`. All other names return not-found.
 
 ```yaml
 inject:

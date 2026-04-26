@@ -335,6 +335,52 @@ func TestGCPServiceAccountSourceWrongType(t *testing.T) {
 	}
 }
 
+func TestGCPServiceAccountSourceCustomTokenName(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "ya29.vertex_token",
+			"expires_in":   3600,
+		})
+	}))
+	defer srv.Close()
+
+	keyPath := writeTestGCPKey(t, key)
+
+	src, err := NewGCPServiceAccountSource(GCPServiceAccountConfig{
+		CredentialsFile: keyPath,
+		TokenName:       "GCP_VERTEX_TOKEN",
+		TokenURL:        srv.URL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx := context.Background()
+
+	// Should respond to custom name
+	val, ok, err := src.Resolve(ctx, "GCP_VERTEX_TOKEN")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || val != "ya29.vertex_token" {
+		t.Errorf("got %q/%v", val, ok)
+	}
+
+	// Should NOT respond to default name
+	_, ok, err = src.Resolve(ctx, "GCP_ACCESS_TOKEN")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok {
+		t.Error("should not respond to default name when custom name set")
+	}
+}
+
 func TestGCPServiceAccountSourceDefaultScope(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {

@@ -209,7 +209,7 @@ func TestSerializeTenantConfig_Intercept(t *testing.T) {
 			Secrets: []api.SecretConfig{
 				{
 					Type: "gcp-service-account",
-					GCPServiceAccount: api.GCPServiceAccountSecretConfig{
+					GCP: api.GCPSecretConfig{
 						CredentialsFile: "/etc/warden/sa-key.json",
 						TokenName:       "GCP_ACCESS_TOKEN",
 					},
@@ -254,11 +254,11 @@ func TestSerializeTenantConfig_Intercept(t *testing.T) {
 	if len(tc.Secrets) != 1 || tc.Secrets[0].Type != "gcp-service-account" {
 		t.Errorf("secrets = %+v", tc.Secrets)
 	}
-	if tc.Secrets[0].GCPServiceAccount.CredentialsFile != "/etc/warden/sa-key.json" {
-		t.Errorf("credentials_file = %q", tc.Secrets[0].GCPServiceAccount.CredentialsFile)
+	if tc.Secrets[0].GCP.CredentialsFile != "/etc/warden/sa-key.json" {
+		t.Errorf("credentials_file = %q", tc.Secrets[0].GCP.CredentialsFile)
 	}
-	if tc.Secrets[0].GCPServiceAccount.TokenName != "GCP_ACCESS_TOKEN" {
-		t.Errorf("token_name = %q", tc.Secrets[0].GCPServiceAccount.TokenName)
+	if tc.Secrets[0].GCP.TokenName != "GCP_ACCESS_TOKEN" {
+		t.Errorf("token_name = %q", tc.Secrets[0].GCP.TokenName)
 	}
 }
 

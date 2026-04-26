@@ -641,3 +641,28 @@ policies: []
 		t.Fatalf("gcp-service-account with credentials should be valid: %v", err)
 	}
 }
+
+func TestValidateGCPAuthorizedUserValid(t *testing.T) {
+	data := []byte(`
+secrets:
+  - type: gcp-authorized-user
+    credentials_file: /etc/warden/adc.json
+policies: []
+`)
+	_, err := config.Parse(data)
+	if err != nil {
+		t.Fatalf("gcp-authorized-user with credentials should be valid: %v", err)
+	}
+}
+
+func TestValidateGCPAuthorizedUserMissingCredentials(t *testing.T) {
+	data := []byte(`
+secrets:
+  - type: gcp-authorized-user
+policies: []
+`)
+	_, err := config.Parse(data)
+	if err == nil {
+		t.Fatal("expected error for gcp-authorized-user without credentials_file")
+	}
+}

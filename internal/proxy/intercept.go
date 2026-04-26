@@ -16,7 +16,7 @@ import (
 
 func (p *Proxy) handleInterceptConnect(conn net.Conn, req *http.Request, decision *policy.PolicyDecision, rt *resolvedTenant, start time.Time) {
 	ctx := req.Context()
-	token, err := p.resolveCredential(ctx, decision.Intercept.Credential, rt.secrets)
+	token, ttl, err := p.resolveCredential(ctx, decision.Intercept.Credential, rt.secrets)
 	if err != nil {
 		p.logDeny(ctx, req, &policy.PolicyDecision{
 			RuleName: decision.RuleName,
@@ -26,7 +26,7 @@ func (p *Proxy) handleInterceptConnect(conn net.Conn, req *http.Request, decisio
 		return
 	}
 
-	body := buildTokenResponse(token)
+	body := buildTokenResponse(token, ttl)
 	resp := &http.Response{
 		StatusCode:    http.StatusOK,
 		ProtoMajor:    1,
@@ -36,14 +36,16 @@ func (p *Proxy) handleInterceptConnect(conn net.Conn, req *http.Request, decisio
 		Body:          io.NopCloser(bytes.NewReader(body)),
 	}
 	resp.Header.Set("Content-Type", "application/json")
-	_ = resp.Write(conn)
+	if err := resp.Write(conn); err != nil {
+		return
+	}
 
 	p.logIntercept(ctx, req, decision, rt.id, start)
 }
 
 func (p *Proxy) handleInterceptForward(w http.ResponseWriter, req *http.Request, decision *policy.PolicyDecision, rt *resolvedTenant, start time.Time) {
 	ctx := req.Context()
-	token, err := p.resolveCredential(ctx, decision.Intercept.Credential, rt.secrets)
+	token, ttl, err := p.resolveCredential(ctx, decision.Intercept.Credential, rt.secrets)
 	if err != nil {
 		p.logDeny(ctx, req, &policy.PolicyDecision{
 			RuleName: decision.RuleName,
@@ -53,7 +55,7 @@ func (p *Proxy) handleInterceptForward(w http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	body := buildTokenResponse(token)
+	body := buildTokenResponse(token, ttl)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	w.Write(body)
@@ -61,15 +63,15 @@ func (p *Proxy) handleInterceptForward(w http.ResponseWriter, req *http.Request,
 	p.logIntercept(ctx, req, decision, rt.id, start)
 }
 
-func (p *Proxy) resolveCredential(ctx context.Context, name string, chain *secrets.Chain) (string, error) {
-	val, ok, err := chain.Resolve(ctx, name)
+func (p *Proxy) resolveCredential(ctx context.Context, name string, chain *secrets.Chain) (string, time.Duration, error) {
+	val, ttl, ok, err := chain.ResolveWithTTL(ctx, name)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	if !ok {
-		return "", &credentialNotFoundError{name: name}
+		return "", 0, &credentialNotFoundError{name: name}
 	}
-	return val, nil
+	return val, ttl, nil
 }
 
 type credentialNotFoundError struct {
@@ -80,11 +82,15 @@ func (e *credentialNotFoundError) Error() string {
 	return "credential not found: " + e.name
 }
 
-func buildTokenResponse(token string) []byte {
+func buildTokenResponse(token string, ttl time.Duration) []byte {
+	expiresIn := 3600
+	if ttl > 0 {
+		expiresIn = int(ttl.Seconds())
+	}
 	body, _ := json.Marshal(map[string]any{
 		"access_token": token,
 		"token_type":   "Bearer",
-		"expires_in":   3600,
+		"expires_in":   expiresIn,
 	})
 	return body
 }

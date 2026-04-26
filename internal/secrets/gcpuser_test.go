@@ -279,6 +279,88 @@ func TestGCPAuthorizedUserSourceWrongType(t *testing.T) {
 	}
 }
 
+func TestGCPAuthorizedUserSourceTokenTTL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "ya29.ttl_user",
+			"expires_in":   1800,
+		})
+	}))
+	defer srv.Close()
+
+	src, err := NewGCPAuthorizedUserSource(GCPAuthorizedUserConfig{
+		CredentialsFile: writeTestADC(t),
+		TokenURL:        srv.URL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = src.Resolve(context.Background(), "GCP_ACCESS_TOKEN")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ttl := src.TokenTTL()
+	if ttl < 25*time.Minute || ttl > 31*time.Minute {
+		t.Errorf("TTL = %v, want ~30m", ttl)
+	}
+}
+
+func TestGCPAuthorizedUserSourceTokenTTLBeforeResolve(t *testing.T) {
+	src, err := NewGCPAuthorizedUserSource(GCPAuthorizedUserConfig{
+		CredentialsFile: writeTestADC(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if src.TokenTTL() != 0 {
+		t.Errorf("TTL before resolve = %v, want 0", src.TokenTTL())
+	}
+}
+
+func TestGCPAuthorizedUserSourceRequiresCredentialsFile(t *testing.T) {
+	_, err := NewGCPAuthorizedUserSource(GCPAuthorizedUserConfig{})
+	if err == nil {
+		t.Fatal("expected error when no credentials_file")
+	}
+}
+
+func TestGCPAuthorizedUserSourceCustomTokenURI(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "ya29.custom_uri",
+			"expires_in":   3600,
+		})
+	}))
+	defer srv.Close()
+
+	credJSON, _ := json.Marshal(map[string]string{
+		"type":          "authorized_user",
+		"client_id":     "cid",
+		"client_secret": "csec",
+		"refresh_token": "rtok",
+		"token_uri":     srv.URL,
+	})
+	path := t.TempDir() + "/custom-uri.json"
+	os.WriteFile(path, credJSON, 0600)
+
+	src, err := NewGCPAuthorizedUserSource(GCPAuthorizedUserConfig{
+		CredentialsFile: path,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	val, ok, err := src.Resolve(context.Background(), "GCP_ACCESS_TOKEN")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || val != "ya29.custom_uri" {
+		t.Errorf("got %q/%v", val, ok)
+	}
+}
+
 func TestGCPAuthorizedUserSourceBadFile(t *testing.T) {
 	_, err := NewGCPAuthorizedUserSource(GCPAuthorizedUserConfig{
 		CredentialsFile: "/nonexistent/adc.json",

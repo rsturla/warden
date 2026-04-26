@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -21,9 +22,9 @@ const gcpDefaultScope = "https://www.googleapis.com/auth/cloud-platform"
 func init() {
 	Register("gcp-service-account", func(cfg config.SecretConfig) (SecretSource, error) {
 		return NewGCPServiceAccountSource(GCPServiceAccountConfig{
-			CredentialsFile: cfg.GCPServiceAccount.CredentialsFile,
-			Scopes:          cfg.GCPServiceAccount.Scopes,
-			TokenName:       cfg.GCPServiceAccount.TokenName,
+			CredentialsFile: cfg.GCP.CredentialsFile,
+			Scopes:          cfg.GCP.Scopes,
+			TokenName:       cfg.GCP.TokenName,
 		})
 	})
 	config.RegisterSecretValidator("gcp-service-account", nil)
@@ -121,7 +122,8 @@ func (s *GCPServiceAccountSource) loadCredentials(cfg GCPServiceAccountConfig) e
 	return nil
 }
 
-func (s *GCPServiceAccountSource) Name() string { return "gcp-service-account" }
+func (s *GCPServiceAccountSource) Name() string      { return "gcp-service-account" }
+func (s *GCPServiceAccountSource) TokenTTL() time.Duration { return s.cache.TTL() }
 
 func (s *GCPServiceAccountSource) Resolve(ctx context.Context, name string) (string, bool, error) {
 	if name != s.tokenName {
@@ -155,7 +157,10 @@ func (s *GCPServiceAccountSource) exchangeJWT(ctx context.Context) (string, time
 		return "", time.Time{}, fmt.Errorf("creating JWT: %w", err)
 	}
 
-	body := "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=" + jwt
+	body := url.Values{
+		"grant_type": {"urn:ietf:params:oauth:grant-type:jwt-bearer"},
+		"assertion":  {jwt},
+	}.Encode()
 	req, err := http.NewRequestWithContext(ctx, "POST", s.tokenURL, strings.NewReader(body))
 	if err != nil {
 		return "", time.Time{}, err

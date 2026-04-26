@@ -19,7 +19,7 @@ type VaultSecretConfig = api.VaultSecretConfig
 type K8sSecretConfig = api.K8sSecretConfig
 type GitHubAppSecretConfig = api.GitHubAppSecretConfig
 type InterceptConfig = api.InterceptConfig
-type GCPServiceAccountSecretConfig = api.GCPServiceAccountSecretConfig
+type GCPSecretConfig = api.GCPSecretConfig
 
 type Config struct {
 	Server    ServerConfig    `yaml:"server"`

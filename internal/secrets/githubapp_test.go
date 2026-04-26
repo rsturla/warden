@@ -280,6 +280,51 @@ func TestNewGitHubAppSourceBadKey(t *testing.T) {
 	}
 }
 
+func TestGitHubAppSourceTokenTTL(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	expiry := time.Now().Add(45 * time.Minute)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		json.NewEncoder(w).Encode(map[string]any{
+			"token":      "ghs_ttl_test",
+			"expires_at": expiry.Format(time.RFC3339),
+		})
+	}))
+	defer srv.Close()
+
+	src := &GitHubAppSource{
+		appID:          1,
+		installationID: 1,
+		key:            key,
+		client:         &http.Client{},
+		apiBase:        srv.URL,
+		cache:          newTokenCache(5 * time.Minute),
+	}
+
+	_, _, err = src.Resolve(context.Background(), "GITHUB_TOKEN")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ttl := src.TokenTTL()
+	if ttl < 39*time.Minute || ttl > 46*time.Minute {
+		t.Errorf("TTL = %v, want ~40-45m", ttl)
+	}
+}
+
+func TestGitHubAppSourceTokenTTLBeforeResolve(t *testing.T) {
+	src := &GitHubAppSource{
+		cache: newTokenCache(5 * time.Minute),
+	}
+	if src.TokenTTL() != 0 {
+		t.Errorf("TTL before resolve = %v, want 0", src.TokenTTL())
+	}
+}
+
 func TestNewGitHubAppSourceMissingKey(t *testing.T) {
 	_, err := NewGitHubAppSource(GitHubAppConfig{
 		AppID:          1,

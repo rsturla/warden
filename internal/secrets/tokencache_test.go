@@ -96,6 +96,40 @@ func TestTokenCacheZeroExpiryNeverExpires(t *testing.T) {
 	}
 }
 
+func TestTokenCacheTTL(t *testing.T) {
+	cache := &tokenCache{
+		token:  "tok",
+		expiry: time.Now().Add(30 * time.Minute),
+		margin: 30 * time.Second,
+	}
+	ttl := cache.TTL()
+	if ttl < 29*time.Minute || ttl > 31*time.Minute {
+		t.Errorf("TTL = %v, want ~30m", ttl)
+	}
+}
+
+func TestTokenCacheTTLExpired(t *testing.T) {
+	cache := &tokenCache{
+		token:  "tok",
+		expiry: time.Now().Add(-1 * time.Hour),
+		margin: 30 * time.Second,
+	}
+	if cache.TTL() != 0 {
+		t.Errorf("expected 0 for expired, got %v", cache.TTL())
+	}
+}
+
+func TestTokenCacheTTLZeroExpiry(t *testing.T) {
+	cache := &tokenCache{
+		token:  "tok",
+		expiry: time.Time{},
+		margin: 30 * time.Second,
+	}
+	if cache.TTL() != 0 {
+		t.Errorf("expected 0 for zero expiry, got %v", cache.TTL())
+	}
+}
+
 func TestTokenCachePropagatesError(t *testing.T) {
 	cache := newTokenCache(30 * time.Second)
 

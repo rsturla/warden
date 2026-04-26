@@ -16,11 +16,16 @@ import (
 func init() {
 	Register("gcp-authorized-user", func(cfg config.SecretConfig) (SecretSource, error) {
 		return NewGCPAuthorizedUserSource(GCPAuthorizedUserConfig{
-			CredentialsFile: cfg.GCPServiceAccount.CredentialsFile,
-			TokenName:       cfg.GCPServiceAccount.TokenName,
+			CredentialsFile: cfg.GCP.CredentialsFile,
+			TokenName:       cfg.GCP.TokenName,
 		})
 	})
-	config.RegisterSecretValidator("gcp-authorized-user", nil)
+	config.RegisterSecretValidator("gcp-authorized-user", func(cfg config.SecretConfig) error {
+		if cfg.GCP.CredentialsFile == "" {
+			return fmt.Errorf("secret source 'gcp-authorized-user' requires credentials_file")
+		}
+		return nil
+	})
 }
 
 type GCPAuthorizedUserConfig struct {
@@ -60,6 +65,10 @@ func NewGCPAuthorizedUserSource(cfg GCPAuthorizedUserConfig) (*GCPAuthorizedUser
 
 	if cfg.TokenURL != "" {
 		s.tokenURL = cfg.TokenURL
+	}
+
+	if s.clientID == "" || s.clientSecret == "" || s.refreshTok == "" {
+		return nil, fmt.Errorf("gcp-authorized-user: credentials_file is required")
 	}
 
 	return s, nil
@@ -106,7 +115,8 @@ func (s *GCPAuthorizedUserSource) loadCredentials(path string) error {
 	return nil
 }
 
-func (s *GCPAuthorizedUserSource) Name() string { return "gcp-authorized-user" }
+func (s *GCPAuthorizedUserSource) Name() string      { return "gcp-authorized-user" }
+func (s *GCPAuthorizedUserSource) TokenTTL() time.Duration { return s.cache.TTL() }
 
 func (s *GCPAuthorizedUserSource) Resolve(ctx context.Context, name string) (string, bool, error) {
 	if name != s.tokenName {

@@ -28,7 +28,7 @@ type SecretConfig struct {
 	Vault             VaultSecretConfig             `yaml:",inline" json:",inline"`
 	Kubernetes        K8sSecretConfig               `yaml:",inline" json:",inline"`
 	GitHubApp         GitHubAppSecretConfig         `yaml:",inline" json:",inline"`
-	GCPServiceAccount GCPServiceAccountSecretConfig `yaml:",inline" json:",inline"`
+	GCP GCPSecretConfig `yaml:",inline" json:",inline"`
 }
 
 type FileSecretConfig struct {
@@ -52,7 +52,7 @@ type GitHubAppSecretConfig struct {
 	PrivateKeyPath string `yaml:"private_key_path,omitempty" json:"privateKeyPath,omitempty"`
 }
 
-type GCPServiceAccountSecretConfig struct {
+type GCPSecretConfig struct {
 	CredentialsFile string   `yaml:"credentials_file,omitempty" json:"credentialsFile,omitempty"`
 	Scopes          []string `yaml:"scopes,omitempty" json:"scopes,omitempty"`
 	TokenName       string   `yaml:"token_name,omitempty" json:"tokenName,omitempty"`

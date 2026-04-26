@@ -29,6 +29,19 @@ func (c *tokenCache) valid() bool {
 	return time.Now().Before(c.expiry.Add(-c.margin))
 }
 
+func (c *tokenCache) TTL() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.expiry.IsZero() {
+		return 0
+	}
+	remaining := time.Until(c.expiry)
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
 func (c *tokenCache) GetOrRefresh(ctx context.Context, refresh func(ctx context.Context) (string, time.Time, error)) (string, error) {
 	c.mu.RLock()
 	if c.valid() {

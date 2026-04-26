@@ -380,6 +380,185 @@ func TestGCPServiceAccountSourceCustomTokenName(t *testing.T) {
 	}
 }
 
+func TestGCPServiceAccountSourceTokenTTL(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "ya29.ttl_test",
+			"expires_in":   1800,
+		})
+	}))
+	defer srv.Close()
+
+	keyPath := writeTestGCPKey(t, key)
+
+	src, err := NewGCPServiceAccountSource(GCPServiceAccountConfig{
+		CredentialsFile: keyPath,
+		TokenURL:        srv.URL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = src.Resolve(context.Background(), "GCP_ACCESS_TOKEN")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ttl := src.TokenTTL()
+	if ttl < 25*time.Minute || ttl > 31*time.Minute {
+		t.Errorf("TTL = %v, want ~30m (1800s - 5m margin)", ttl)
+	}
+}
+
+func TestGCPServiceAccountSourceTokenTTLBeforeResolve(t *testing.T) {
+	src, _ := NewGCPServiceAccountSource(GCPServiceAccountConfig{
+		TokenURL: "http://unused",
+	})
+	if src.TokenTTL() != 0 {
+		t.Errorf("TTL before resolve = %v, want 0", src.TokenTTL())
+	}
+}
+
+func TestGCPServiceAccountSourceEmptyToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "",
+			"expires_in":   3600,
+		})
+	}))
+	defer srv.Close()
+
+	src, err := NewGCPServiceAccountSource(GCPServiceAccountConfig{
+		TokenURL: srv.URL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = src.Resolve(context.Background(), "GCP_ACCESS_TOKEN")
+	if err == nil {
+		t.Fatal("expected error for empty access_token")
+	}
+}
+
+func TestGCPServiceAccountSourceBadTokenJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+
+	src, err := NewGCPServiceAccountSource(GCPServiceAccountConfig{
+		TokenURL: srv.URL,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = src.Resolve(context.Background(), "GCP_ACCESS_TOKEN")
+	if err == nil {
+		t.Fatal("expected error for bad JSON response")
+	}
+}
+
+func TestGCPServiceAccountSourceMissingEmail(t *testing.T) {
+	key, _ := rsa.GenerateKey(rand.Reader, 2048)
+	pemData := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+	keyJSON, _ := json.Marshal(map[string]string{
+		"type":        "service_account",
+		"private_key": string(pemData),
+	})
+	path := t.TempDir() + "/no-email.json"
+	os.WriteFile(path, keyJSON, 0600)
+
+	_, err := NewGCPServiceAccountSource(GCPServiceAccountConfig{
+		CredentialsFile: path,
+	})
+	if err == nil {
+		t.Fatal("expected error for missing client_email")
+	}
+}
+
+func TestGCPServiceAccountSourceMissingPrivateKey(t *testing.T) {
+	keyJSON, _ := json.Marshal(map[string]string{
+		"type":         "service_account",
+		"client_email": "test@example.iam.gserviceaccount.com",
+	})
+	path := t.TempDir() + "/no-key.json"
+	os.WriteFile(path, keyJSON, 0600)
+
+	_, err := NewGCPServiceAccountSource(GCPServiceAccountConfig{
+		CredentialsFile: path,
+	})
+	if err == nil {
+		t.Fatal("expected error for missing private_key")
+	}
+}
+
+func TestGCPServiceAccountSourceBadPrivateKey(t *testing.T) {
+	keyJSON, _ := json.Marshal(map[string]string{
+		"type":         "service_account",
+		"client_email": "test@example.iam.gserviceaccount.com",
+		"private_key":  "not a pem key",
+	})
+	path := t.TempDir() + "/bad-key.json"
+	os.WriteFile(path, keyJSON, 0600)
+
+	_, err := NewGCPServiceAccountSource(GCPServiceAccountConfig{
+		CredentialsFile: path,
+	})
+	if err == nil {
+		t.Fatal("expected error for bad private key")
+	}
+}
+
+func TestGCPServiceAccountSourceCustomTokenURI(t *testing.T) {
+	key, _ := rsa.GenerateKey(rand.Reader, 2048)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"access_token": "ya29.custom_uri",
+			"expires_in":   3600,
+		})
+	}))
+	defer srv.Close()
+
+	pemData := pem.EncodeToMemory(&pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(key),
+	})
+	keyJSON, _ := json.Marshal(map[string]string{
+		"type":         "service_account",
+		"client_email": "test@example.iam.gserviceaccount.com",
+		"private_key":  string(pemData),
+		"token_uri":    srv.URL,
+	})
+	path := t.TempDir() + "/custom-uri.json"
+	os.WriteFile(path, keyJSON, 0600)
+
+	src, err := NewGCPServiceAccountSource(GCPServiceAccountConfig{
+		CredentialsFile: path,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	val, ok, err := src.Resolve(context.Background(), "GCP_ACCESS_TOKEN")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok || val != "ya29.custom_uri" {
+		t.Errorf("got %q/%v", val, ok)
+	}
+}
+
 func TestGCPServiceAccountSourceDefaultScope(t *testing.T) {
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {

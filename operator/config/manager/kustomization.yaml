@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: warden-operator-system
+namePrefix: warden-operator-
+resources:
+  - namespace.yaml
+  - service_account.yaml
+  - manager.yaml
+images:
+  - name: warden-operator
+    newName: ghcr.io/rsturla/warden-operator
+    newTag: latest

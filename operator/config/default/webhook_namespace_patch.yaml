@@ -1,0 +1,9 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: warden-operator
+webhooks:
+  - name: pod-mutator.wardenproxy.dev
+    clientConfig:
+      service:
+        namespace: warden-operator-system

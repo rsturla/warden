@@ -1,0 +1,43 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: warden-operator-system
+namePrefix: warden-operator-
+resources:
+  - ../crd
+  - ../rbac
+  - ../manager
+  - ../webhook
+  - ../certmanager
+
+patches:
+  - path: webhook_namespace_patch.yaml
+
+replacements:
+  - source:
+      kind: Certificate
+      group: cert-manager.io
+      version: v1
+      name: warden-operator-webhook
+      fieldPath: .metadata.namespace
+    targets:
+      - select:
+          kind: MutatingWebhookConfiguration
+        fieldPaths:
+          - .metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: /
+          index: 0
+  - source:
+      kind: Certificate
+      group: cert-manager.io
+      version: v1
+      name: warden-operator-webhook
+      fieldPath: .metadata.name
+    targets:
+      - select:
+          kind: MutatingWebhookConfiguration
+        fieldPaths:
+          - .metadata.annotations.[cert-manager.io/inject-ca-from]
+        options:
+          delimiter: /
+          index: 1

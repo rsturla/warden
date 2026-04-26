@@ -27,10 +27,10 @@ func newTestMutator(t *testing.T, objs ...runtime.Object) *PodMutator {
 		t.Fatal(err)
 	}
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithRuntimeObjects(objs...).Build()
-	decoder := admission.NewDecoder(scheme)
-	m := &PodMutator{Client: cl}
-	m.InjectDecoder(decoder)
-	return m
+	return &PodMutator{
+		Client:  cl,
+		Decoder: admission.NewDecoder(scheme),
+	}
 }
 
 func testProxy(ns string) *wardenio.WardenProxy {

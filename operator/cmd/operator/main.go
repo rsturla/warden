@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	ctrlwebhook "sigs.k8s.io/controller-runtime/pkg/webhook"
+	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	wardenio "github.com/rsturla/warden/operator/api/v1alpha1"
 	"github.com/rsturla/warden/operator/internal/controller"
@@ -33,11 +34,13 @@ func main() {
 	var probeAddr string
 	var enableLeaderElection bool
 	var webhookPort int
+	var enableWebhook bool
 
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. Use 0 to disable.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false, "Enable leader election for controller manager.")
 	flag.IntVar(&webhookPort, "webhook-port", 9443, "The port the webhook server binds to.")
+	flag.BoolVar(&enableWebhook, "enable-webhook", true, "Enable the mutating admission webhook.")
 
 	opts := zap.Options{Development: true}
 	opts.BindFlags(flag.CommandLine)
@@ -45,18 +48,23 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	mgrOpts := ctrl.Options{
 		Scheme: scheme,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
 		},
-		WebhookServer: ctrlwebhook.NewServer(ctrlwebhook.Options{
-			Port: webhookPort,
-		}),
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "warden-operator.wardenproxy.dev",
-	})
+	}
+
+	if enableWebhook {
+		mgrOpts.WebhookServer = ctrlwebhook.NewServer(ctrlwebhook.Options{
+			Port: webhookPort,
+		})
+	}
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), mgrOpts)
 	if err != nil {
 		setupLog.Error(err, "unable to create manager")
 		os.Exit(1)
@@ -78,11 +86,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	mgr.GetWebhookServer().Register("/mutate-v1-pod", &ctrlwebhook.Admission{
-		Handler: &webhook.PodMutator{
-			Client: mgr.GetClient(),
-		},
-	})
+	if enableWebhook {
+		mgr.GetWebhookServer().Register("/mutate-v1-pod", &ctrlwebhook.Admission{
+			Handler: &webhook.PodMutator{
+				Client:  mgr.GetClient(),
+				Decoder: admission.NewDecoder(mgr.GetScheme()),
+			},
+		})
+	}
 
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		setupLog.Error(err, "unable to set up health check")
@@ -93,7 +104,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	setupLog.Info("starting manager")
+	setupLog.Info("starting manager", "webhook", enableWebhook)
 	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)

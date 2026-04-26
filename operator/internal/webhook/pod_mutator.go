@@ -25,14 +25,14 @@ const (
 
 type PodMutator struct {
 	Client  client.Client
-	decoder admission.Decoder
+	Decoder admission.Decoder
 }
 
 func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	logger := log.FromContext(ctx)
 
 	pod := &corev1.Pod{}
-	if err := m.decoder.Decode(req, pod); err != nil {
+	if err := m.Decoder.Decode(req, pod); err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
@@ -121,9 +121,6 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
 
-func (m *PodMutator) InjectDecoder(d admission.Decoder) {
-	m.decoder = d
-}
 
 func (m *PodMutator) findWardenProxy(ctx context.Context, namespace string) (*wardenio.WardenProxy, error) {
 	var list wardenio.WardenProxyList

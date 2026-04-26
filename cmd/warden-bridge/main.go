@@ -10,6 +10,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/rsturla/warden/internal/bridge"
@@ -106,7 +107,7 @@ func buildDialer(vsockCID, vsockPort uint, proxyAddr, certPath, keyPath, caPath 
 	}
 
 	if caPath != "" {
-		caPEM, err := os.ReadFile(caPath)
+		caPEM, err := os.ReadFile(filepath.Clean(caPath))
 		if err != nil {
 			return nil, "", fmt.Errorf("reading proxy CA: %w", err)
 		}

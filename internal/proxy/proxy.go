@@ -10,15 +10,12 @@ import (
 
 	wardenca "github.com/rsturla/warden/internal/ca"
 	wardendns "github.com/rsturla/warden/internal/dns"
-	"github.com/rsturla/warden/internal/policy"
-	"github.com/rsturla/warden/internal/secrets"
 	"github.com/rsturla/warden/internal/telemetry"
 )
 
 type Proxy struct {
 	ca        wardenca.CertProvider
-	policy    policy.PolicyEngine
-	secrets   *secrets.Chain
+	tenants   TenantResolver
 	resolver  wardendns.Resolver
 	denylist  *wardendns.Denylist
 	telemetry telemetry.TelemetryExporter
@@ -27,8 +24,7 @@ type Proxy struct {
 
 type Config struct {
 	CA        wardenca.CertProvider
-	Policy    policy.PolicyEngine
-	Secrets   *secrets.Chain
+	Tenants   TenantResolver
 	Resolver  wardendns.Resolver
 	Denylist  *wardendns.Denylist
 	Telemetry telemetry.TelemetryExporter
@@ -37,8 +33,7 @@ type Config struct {
 func New(cfg Config) *Proxy {
 	p := &Proxy{
 		ca:        cfg.CA,
-		policy:    cfg.Policy,
-		secrets:   cfg.Secrets,
+		tenants:   cfg.Tenants,
 		resolver:  cfg.Resolver,
 		denylist:  cfg.Denylist,
 		telemetry: cfg.Telemetry,

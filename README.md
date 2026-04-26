@@ -16,7 +16,7 @@ Warden solves this by performing TLS interception:
 
 ## Architecture
 
-Warden runs alongside agents — one instance per agent or agent type. The agent connects to Warden over TCP or vsock depending on the deployment model. NetworkPolicy ensures agents can only reach the internet through Warden. See [Deployment](docs/deployment.md) for full setup guides.
+Warden runs alongside agents. In **single-tenant** mode, one instance serves one agent. In **multi-tenant** mode, a single instance serves multiple agents, each identified by mTLS client certificate with isolated policies and secrets. Agents connect over TCP or vsock. NetworkPolicy or Security Groups ensure agents can only reach the internet through Warden. See [Deployment](docs/deployment.md) for full setup guides.
 
 **Kubernetes / OpenShift (separate pods, NetworkPolicy enforced):**
 
@@ -64,6 +64,17 @@ Warden runs alongside agents — one instance per agent or agent type. The agent
 | HTTPS | yes | MITM — TLS termination, inspection, re-encryption |
 | HTTP/2 | yes | Transparent via Go stdlib. Works with gRPC (`/package.Service/Method`) |
 | WebSocket | upgrade only | Policy evaluated on upgrade request. Frames pass through post-upgrade |
+
+**Multi-Tenant (mTLS, multiple agents per Warden):**
+
+```
+Agent EC2 A ──mTLS──▶ ┌─────────────────────┐
+  (CN=alpha)          │      Warden          │
+Agent EC2 B ──mTLS──▶ │  tenant resolution   │──▶ upstream
+  (CN=beta)           │  per-tenant policies  │
+Agent EC2 C ──mTLS──▶ │  per-tenant secrets   │
+  (CN=gamma)          └─────────────────────┘
+```
 
 ## Quick Start
 

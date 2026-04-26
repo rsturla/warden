@@ -183,6 +183,12 @@ For GitHub Enterprise Server, set the `GITHUB_API_BASE` environment variable:
 export GITHUB_API_BASE=https://github.example.com/api/v3
 ```
 
+## Multi-Tenant Isolation
+
+In multi-tenant mode, each tenant has its own secret sources defined in its config file (`tenants.d/<tenant-id>.yaml`). Secret chains are fully isolated — tenant A cannot access tenant B's secrets.
+
+**Note:** the `env` source reads process-wide environment variables, which are shared across all tenants. For strict isolation, use `vault` or `file` sources with tenant-specific paths (e.g., different Vault prefixes per tenant).
+
 ## Source Chain
 
 Sources are checked in config order. The first source that resolves a variable wins. If a source returns an error (not "not found", but an actual error), resolution stops and the request is denied.

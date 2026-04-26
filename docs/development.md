@@ -72,9 +72,10 @@ internal/
   inject/              Header/query injection, ${VAR} template resolution
   listener/            TCP + vsock listener factory, connection limiter
   policy/              PolicyEngine interface, host/path glob, first-match-wins
-  proxy/               HTTP forward proxy + HTTPS CONNECT MITM handler
+  proxy/               HTTP forward proxy + HTTPS CONNECT MITM handler, TenantResolver
   secrets/             SecretSource implementations
   telemetry/           TelemetryExporter implementations
+  tenant/              Tenant store, per-tenant config, file-based store with hot reload
   version/             Version/commit/date vars (injected via ldflags)
 ```
 
@@ -111,6 +112,31 @@ type TelemetryExporter interface {
 }
 ```
 
+### TenantResolver
+
+```go
+type TenantResolver interface {
+    Resolve(r *http.Request) (*resolvedTenant, error)
+}
+```
+
+Determines which tenant's policies and secrets apply to a request. Every request goes through `TenantResolver` — there is no shortcut to access policies or secrets directly. Implementations:
+
+- **SingleTenantResolver** — returns the same tenant for every request (single-tenant mode, no TLS required)
+- **MTLSTenantResolver** — extracts tenant ID from the client certificate CN, looks up the tenant store
+
+### Tenant Store
+
+```go
+type Store interface {
+    Get(ctx context.Context, tenantID string) (*Tenant, error)
+    List(ctx context.Context) ([]string, error)
+    Close() error
+}
+```
+
+Manages per-tenant configuration (policies + secrets). Implementation: `FileStore` (loads YAML files from a directory, supports hot reload via polling).
+
 ## Adding Features
 
 ### New secret backend
@@ -130,6 +156,18 @@ type TelemetryExporter interface {
 
 1. Implement `TelemetryExporter` in `internal/telemetry/`
 2. Wire it in `cmd/warden/main.go` via `MultiExporter`
+
+### New tenant resolver
+
+1. Implement `TenantResolver` in `internal/proxy/resolver.go`
+2. Wire it in `cmd/warden/main.go` based on config
+
+### New tenant store backend
+
+1. Implement `tenant.Store` in `internal/tenant/` (e.g., `pgstore.go` for Postgres)
+2. Add config struct and validation in `internal/config/config.go`
+3. Wire it in `cmd/warden/main.go`
+4. The `FileStore` implementation is a good reference — see `internal/tenant/filestore.go`
 
 ## Code Conventions
 

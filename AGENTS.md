@@ -35,9 +35,10 @@ internal/
   inject/                header/query injection, ${VAR} template resolution
   listener/              TCP + vsock listener factory, connection limiter
   policy/                PolicyEngine interface, host/path glob, first-match-wins
-  proxy/                 HTTP forward proxy + HTTPS CONNECT MITM handler
+  proxy/                 HTTP forward proxy + HTTPS CONNECT MITM handler, TenantResolver
   secrets/               SecretSource interface: env, file, vault, kubernetes, github-app
   telemetry/             TelemetryExporter interface: slog JSON, OTLP/HTTP, multi-exporter
+  tenant/                Tenant store interface, per-tenant config, FileStore with hot reload
   version/               version/commit/date vars (injected via ldflags)
 ```
 
@@ -45,9 +46,11 @@ internal/
 
 All interfaces take `context.Context` first param. See [Development](docs/development.md) for full signatures.
 
+- **TenantResolver** — `Resolve(r *http.Request) (*resolvedTenant, error)`. All policy/secret access goes through this. Implementations: SingleTenantResolver, MTLSTenantResolver.
 - **PolicyEngine** — `Evaluate` (first-match-wins, default-deny) + `CanMatchHost` (early CONNECT rejection)
 - **SecretSource** — `Resolve(ctx, name) (string, bool, error)`. Implementations: env, file, vault, kubernetes, github-app. See [Secrets](docs/secrets.md).
 - **TelemetryExporter** — `LogRequest`, `StartSpan`, `RecordMetric`, `Close`. Implementations: slog, OTLP/HTTP, multi. See [Telemetry](docs/telemetry.md).
+- **Tenant Store** — `Get(ctx, tenantID)` + `List(ctx)` + `Close()`. Implementation: FileStore (directory of YAML files, hot reload).
 
 ## Request Flow
 

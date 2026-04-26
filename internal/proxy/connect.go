@@ -25,10 +25,15 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 		port = "443"
 	}
 
-	// Early rejection: if no allow rule can match this host, reject before TLS handshake.
-	if !p.policy.CanMatchHost(host) {
+	rt, err := p.tenants.Resolve(r)
+	if err != nil {
+		p.writeError(w, http.StatusForbidden, "tenant resolution failed")
+		return
+	}
+
+	if !rt.policy.CanMatchHost(host) {
 		start := time.Now()
-		p.logDeny(r.Context(), r, &policy.PolicyDecision{Reason: "no_match"}, start)
+		p.logDeny(r.Context(), r, &policy.PolicyDecision{Reason: "no_match"}, rt.id, start)
 		p.writeError(w, http.StatusForbidden, "no matching policy")
 		return
 	}
@@ -76,15 +81,15 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 		req.URL.Host = connectHost
 		req.RemoteAddr = r.RemoteAddr
 
-		p.handleDecryptedRequest(tlsConn, req, host, port)
+		p.handleDecryptedRequest(tlsConn, req, host, port, rt)
 	}
 }
 
-func (p *Proxy) handleDecryptedRequest(clientConn net.Conn, req *http.Request, host, port string) {
+func (p *Proxy) handleDecryptedRequest(clientConn net.Conn, req *http.Request, host, port string, rt *resolvedTenant) {
 	start := time.Now()
 	ctx := req.Context()
 
-	decision, err := p.policy.Evaluate(ctx, &policy.RequestContext{
+	decision, err := rt.policy.Evaluate(ctx, &policy.RequestContext{
 		Host:   host,
 		Path:   req.URL.Path,
 		Method: req.Method,
@@ -95,19 +100,19 @@ func (p *Proxy) handleDecryptedRequest(clientConn net.Conn, req *http.Request, h
 	}
 
 	if !decision.Allowed {
-		p.logDeny(ctx, req, decision, start)
+		p.logDeny(ctx, req, decision, rt.id, start)
 		writeHTTPError(clientConn, http.StatusForbidden, denyMessage(decision))
 		return
 	}
 
 	var injectResult *inject.Result
 	if decision.Inject != nil {
-		injectResult, err = inject.Apply(ctx, req, decision.Inject, p.secrets)
+		injectResult, err = inject.Apply(ctx, req, decision.Inject, rt.secrets)
 		if err != nil {
 			p.logDeny(ctx, req, &policy.PolicyDecision{
 				RuleName: decision.RuleName,
 				Reason:   "secret_resolution_failed",
-			}, start)
+			}, rt.id, start)
 			writeHTTPError(clientConn, http.StatusForbidden, "secret resolution failed")
 			return
 		}
@@ -140,7 +145,7 @@ func (p *Proxy) handleDecryptedRequest(clientConn net.Conn, req *http.Request, h
 		return
 	}
 
-	p.logAllow(ctx, req, decision, injectResult, resp.StatusCode, start)
+	p.logAllow(ctx, req, decision, injectResult, rt.id, resp.StatusCode, start)
 }
 
 func (p *Proxy) dialUpstream(ctx context.Context, host, port string) (net.Conn, error) {

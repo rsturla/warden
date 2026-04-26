@@ -19,14 +19,20 @@ func (e *SlogExporter) LogRequest(ctx context.Context, entry RequestLog) error {
 		level = slog.LevelWarn
 	}
 
-	attrs := []slog.Attr{
+	attrs := []slog.Attr{}
+
+	if entry.TenantID != "" {
+		attrs = append(attrs, slog.String("tenant_id", entry.TenantID))
+	}
+
+	attrs = append(attrs,
 		slog.String("client_ip", entry.ClientIP),
 		slog.String("host", entry.Host),
 		slog.String("method", entry.Method),
 		slog.String("path", entry.Path),
 		slog.String("action", entry.Action),
 		slog.Int64("duration_ms", entry.DurationMs),
-	}
+	)
 
 	if entry.Policy != "" {
 		attrs = append(attrs, slog.String("policy", entry.Policy))

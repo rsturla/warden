@@ -16,12 +16,18 @@ func (p *Proxy) handleForward(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	ctx := r.Context()
 
+	rt, err := p.tenants.Resolve(r)
+	if err != nil {
+		p.writeError(w, http.StatusForbidden, "tenant resolution failed")
+		return
+	}
+
 	host := r.URL.Hostname()
 	if host == "" {
 		host = r.Host
 	}
 
-	decision, err := p.policy.Evaluate(ctx, &policy.RequestContext{
+	decision, err := rt.policy.Evaluate(ctx, &policy.RequestContext{
 		Host:   host,
 		Path:   r.URL.Path,
 		Method: r.Method,
@@ -32,19 +38,19 @@ func (p *Proxy) handleForward(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !decision.Allowed {
-		p.logDeny(ctx, r, decision, start)
+		p.logDeny(ctx, r, decision, rt.id, start)
 		p.writeError(w, http.StatusForbidden, denyMessage(decision))
 		return
 	}
 
 	var injectResult *inject.Result
 	if decision.Inject != nil {
-		injectResult, err = inject.Apply(ctx, r, decision.Inject, p.secrets)
+		injectResult, err = inject.Apply(ctx, r, decision.Inject, rt.secrets)
 		if err != nil {
 			p.logDeny(ctx, r, &policy.PolicyDecision{
 				RuleName: decision.RuleName,
 				Reason:   "secret_resolution_failed",
-			}, start)
+			}, rt.id, start)
 			p.writeError(w, http.StatusForbidden, "secret resolution failed")
 			return
 		}
@@ -72,14 +78,15 @@ func (p *Proxy) handleForward(w http.ResponseWriter, r *http.Request) {
 	_ = http.NewResponseController(w).Flush()
 	_ = copyBody(w, resp.Body)
 
-	p.logAllow(ctx, r, decision, injectResult, resp.StatusCode, start)
+	p.logAllow(ctx, r, decision, injectResult, rt.id, resp.StatusCode, start)
 }
 
-func (p *Proxy) logAllow(ctx context.Context, r *http.Request, d *policy.PolicyDecision, inj *inject.Result, status int, start time.Time) {
+func (p *Proxy) logAllow(ctx context.Context, r *http.Request, d *policy.PolicyDecision, inj *inject.Result, tenantID string, status int, start time.Time) {
 	if p.telemetry == nil {
 		return
 	}
 	entry := telemetry.RequestLog{
+		TenantID:       tenantID,
 		ClientIP:       clientIP(r),
 		Host:           requestHost(r),
 		Method:         r.Method,
@@ -95,7 +102,7 @@ func (p *Proxy) logAllow(ctx context.Context, r *http.Request, d *policy.PolicyD
 	_ = p.telemetry.LogRequest(ctx, entry)
 }
 
-func (p *Proxy) logDeny(ctx context.Context, r *http.Request, d *policy.PolicyDecision, start time.Time) {
+func (p *Proxy) logDeny(ctx context.Context, r *http.Request, d *policy.PolicyDecision, tenantID string, start time.Time) {
 	if p.telemetry == nil {
 		return
 	}
@@ -104,6 +111,7 @@ func (p *Proxy) logDeny(ctx context.Context, r *http.Request, d *policy.PolicyDe
 		reason = "no_match"
 	}
 	_ = p.telemetry.LogRequest(ctx, telemetry.RequestLog{
+		TenantID:   tenantID,
 		ClientIP:   clientIP(r),
 		Host:       requestHost(r),
 		Method:     r.Method,

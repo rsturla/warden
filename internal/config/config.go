@@ -17,11 +17,23 @@ type Config struct {
 	Secrets   []SecretConfig  `yaml:"secrets"`
 	Policies  []PolicyRule    `yaml:"policies"`
 	Telemetry TelemetryConfig `yaml:"telemetry"`
+	Tenants   *TenantsConfig  `yaml:"tenants,omitempty"`
 }
 
 type ServerConfig struct {
-	Listen       string `yaml:"listen"`
-	HealthListen string `yaml:"health_listen"`
+	Listen       string           `yaml:"listen"`
+	HealthListen string           `yaml:"health_listen"`
+	TLS          *ServerTLSConfig `yaml:"tls,omitempty"`
+}
+
+type ServerTLSConfig struct {
+	Cert     string `yaml:"cert"`
+	Key      string `yaml:"key"`
+	ClientCA string `yaml:"client_ca"`
+}
+
+type TenantsConfig struct {
+	Dir string `yaml:"dir"`
 }
 
 type CAConfig struct {
@@ -228,5 +240,33 @@ func (c *Config) Validate() error {
 	if c.Telemetry.Metrics.Enabled && c.Telemetry.Metrics.Endpoint == "" {
 		return fmt.Errorf("telemetry.metrics.endpoint is required when metrics are enabled")
 	}
+
+	if c.Tenants != nil {
+		if c.Tenants.Dir == "" {
+			return fmt.Errorf("tenants.dir is required when tenants are configured")
+		}
+		if c.Server.TLS == nil {
+			return fmt.Errorf("server.tls is required when tenants are configured (mTLS needed for tenant identification)")
+		}
+		if len(c.Policies) > 0 {
+			return fmt.Errorf("root-level policies must be empty when tenants are configured (use per-tenant config files)")
+		}
+		if len(c.Secrets) > 0 {
+			return fmt.Errorf("root-level secrets must be empty when tenants are configured (use per-tenant config files)")
+		}
+	}
+
+	if c.Server.TLS != nil {
+		if c.Server.TLS.Cert == "" {
+			return fmt.Errorf("server.tls.cert is required")
+		}
+		if c.Server.TLS.Key == "" {
+			return fmt.Errorf("server.tls.key is required")
+		}
+		if c.Server.TLS.ClientCA == "" {
+			return fmt.Errorf("server.tls.client_ca is required")
+		}
+	}
+
 	return nil
 }

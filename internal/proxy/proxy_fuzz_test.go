@@ -25,8 +25,7 @@ func FuzzProxyRequest(f *testing.F) {
 
 	p := New(Config{
 		CA:       ca,
-		Policy:   engine,
-		Secrets:  chain,
+		Tenants:  NewSingleTenantResolver(engine, chain),
 		Resolver: resolver,
 		Denylist: denylist,
 	})

@@ -403,6 +403,134 @@ policies:
 	}
 }
 
+func TestValidateTenantsRequiresTLS(t *testing.T) {
+	data := []byte(`
+tenants:
+  dir: /etc/warden/tenants.d
+`)
+	_, err := Parse(data)
+	if err == nil {
+		t.Fatal("expected error: tenants without server.tls")
+	}
+}
+
+func TestValidateTenantsRequiresDir(t *testing.T) {
+	data := []byte(`
+server:
+  tls:
+    cert: server.crt
+    key: server.key
+    client_ca: ca.crt
+tenants: {}
+`)
+	_, err := Parse(data)
+	if err == nil {
+		t.Fatal("expected error: tenants without dir")
+	}
+}
+
+func TestValidateTenantsRejectsPolicies(t *testing.T) {
+	data := []byte(`
+server:
+  tls:
+    cert: server.crt
+    key: server.key
+    client_ca: ca.crt
+tenants:
+  dir: /etc/warden/tenants.d
+policies:
+  - name: test
+    host: "example.com"
+    action: allow
+`)
+	_, err := Parse(data)
+	if err == nil {
+		t.Fatal("expected error: tenants with root-level policies")
+	}
+}
+
+func TestValidateTenantsRejectsSecrets(t *testing.T) {
+	data := []byte(`
+server:
+  tls:
+    cert: server.crt
+    key: server.key
+    client_ca: ca.crt
+tenants:
+  dir: /etc/warden/tenants.d
+secrets:
+  - type: env
+`)
+	_, err := Parse(data)
+	if err == nil {
+		t.Fatal("expected error: tenants with root-level secrets")
+	}
+}
+
+func TestValidateTenantsValid(t *testing.T) {
+	data := []byte(`
+server:
+  tls:
+    cert: server.crt
+    key: server.key
+    client_ca: ca.crt
+tenants:
+  dir: /etc/warden/tenants.d
+`)
+	cfg, err := Parse(data)
+	if err != nil {
+		t.Fatalf("valid tenant config rejected: %v", err)
+	}
+	if cfg.Tenants == nil {
+		t.Fatal("tenants should not be nil")
+	}
+	if cfg.Tenants.Dir != "/etc/warden/tenants.d" {
+		t.Errorf("tenants.dir = %q", cfg.Tenants.Dir)
+	}
+}
+
+func TestValidateServerTLSMissingCert(t *testing.T) {
+	data := []byte(`
+server:
+  tls:
+    key: server.key
+    client_ca: ca.crt
+policies: []
+`)
+	_, err := Parse(data)
+	if err == nil {
+		t.Fatal("expected error: TLS without cert")
+	}
+}
+
+func TestValidateServerTLSMissingKey(t *testing.T) {
+	data := []byte(`
+server:
+  tls:
+    cert: server.crt
+    client_ca: ca.crt
+policies: []
+`)
+	_, err := Parse(data)
+	if err == nil {
+		t.Fatal("expected error: TLS without key")
+	}
+}
+
+func TestValidateServerTLSMissingClientCA(t *testing.T) {
+	data := []byte(`
+server:
+  tls:
+    cert: server.crt
+    key: server.key
+policies: []
+`)
+	_, err := Parse(data)
+	if err == nil {
+		t.Fatal("expected error: TLS without client_ca")
+	}
+}
+
 func TestValidateEmptyMethodsList(t *testing.T) {
 	data := []byte(`
 policies:

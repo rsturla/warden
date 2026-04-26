@@ -41,8 +41,7 @@ func startProxy(t *testing.T, rules []config.PolicyRule, secretVals map[string]s
 
 	proxy := New(Config{
 		CA:        ca,
-		Policy:    engine,
-		Secrets:   chain,
+		Tenants:   NewSingleTenantResolver(engine, chain),
 		Resolver:  resolver,
 		Denylist:  denylist,
 		Telemetry: exp,
@@ -237,8 +236,7 @@ func startProxyWithUpstreamTrust(t *testing.T, rules []config.PolicyRule, secret
 
 	p := New(Config{
 		CA:        ca,
-		Policy:    engine,
-		Secrets:   chain,
+		Tenants:   NewSingleTenantResolver(engine, chain),
 		Resolver:  resolver,
 		Denylist:  denylist,
 		Telemetry: exp,

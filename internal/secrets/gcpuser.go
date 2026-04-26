@@ -115,7 +115,7 @@ func (s *GCPAuthorizedUserSource) loadCredentials(path string) error {
 	return nil
 }
 
-func (s *GCPAuthorizedUserSource) Name() string      { return "gcp-authorized-user" }
+func (s *GCPAuthorizedUserSource) Name() string            { return "gcp-authorized-user" }
 func (s *GCPAuthorizedUserSource) TokenTTL() time.Duration { return s.cache.TTL() }
 
 func (s *GCPAuthorizedUserSource) Resolve(ctx context.Context, name string) (string, bool, error) {

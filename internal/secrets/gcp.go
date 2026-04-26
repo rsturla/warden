@@ -122,7 +122,7 @@ func (s *GCPServiceAccountSource) loadCredentials(cfg GCPServiceAccountConfig) e
 	return nil
 }
 
-func (s *GCPServiceAccountSource) Name() string      { return "gcp-service-account" }
+func (s *GCPServiceAccountSource) Name() string            { return "gcp-service-account" }
 func (s *GCPServiceAccountSource) TokenTTL() time.Duration { return s.cache.TTL() }
 
 func (s *GCPServiceAccountSource) Resolve(ctx context.Context, name string) (string, bool, error) {

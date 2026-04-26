@@ -78,7 +78,7 @@ func NewGitHubAppSource(cfg GitHubAppConfig) (*GitHubAppSource, error) {
 	}, nil
 }
 
-func (s *GitHubAppSource) Name() string      { return "github-app" }
+func (s *GitHubAppSource) Name() string            { return "github-app" }
 func (s *GitHubAppSource) TokenTTL() time.Duration { return s.cache.TTL() }
 
 func (s *GitHubAppSource) Resolve(ctx context.Context, name string) (string, bool, error) {

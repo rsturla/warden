@@ -44,13 +44,18 @@ func (p *Proxy) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(http.StatusOK)
-
-	clientConn, _, err := hj.Hijack()
+	clientConn, buf, err := hj.Hijack()
 	if err != nil {
 		return
 	}
 	defer clientConn.Close()
+
+	if _, err := buf.WriteString("HTTP/1.1 200 Connection Established\r\n\r\n"); err != nil {
+		return
+	}
+	if err := buf.Flush(); err != nil {
+		return
+	}
 
 	tlsConfig := &tls.Config{
 		GetCertificate: func(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {

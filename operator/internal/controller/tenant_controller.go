@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -236,8 +237,26 @@ func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func serializeTenantConfig(tenant *wardenio.Tenant) (string, error) {
+	policies := make([]api.PolicyRule, len(tenant.Spec.Policies))
+	copy(policies, tenant.Spec.Policies)
+	for i := range policies {
+		policies[i].Name = sanitizeField(policies[i].Name)
+		policies[i].Host = sanitizeField(policies[i].Host)
+		policies[i].Path = sanitizeField(policies[i].Path)
+		policies[i].Action = sanitizeField(policies[i].Action)
+		for j := range policies[i].Methods {
+			policies[i].Methods[j] = sanitizeField(policies[i].Methods[j])
+		}
+		if policies[i].Name == "" {
+			return "", fmt.Errorf("policy %d: name is empty after sanitization", i)
+		}
+		if policies[i].Host == "" {
+			return "", fmt.Errorf("policy %q: host is empty after sanitization", policies[i].Name)
+		}
+	}
+
 	tc := api.TenantConfig{
-		Policies: tenant.Spec.Policies,
+		Policies: policies,
 		Secrets:  tenant.Spec.Secrets,
 	}
 	data, err := yaml.Marshal(tc)
@@ -245,6 +264,15 @@ func serializeTenantConfig(tenant *wardenio.Tenant) (string, error) {
 		return "", err
 	}
 	return string(data), nil
+}
+
+func sanitizeField(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\r' {
+			return -1
+		}
+		return r
+	}, s)
 }
 
 func configMapName(proxy *wardenio.WardenProxy) string {

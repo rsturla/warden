@@ -18,6 +18,7 @@ type FileSecretConfig = api.FileSecretConfig
 type VaultSecretConfig = api.VaultSecretConfig
 type K8sSecretConfig = api.K8sSecretConfig
 type GitHubAppSecretConfig = api.GitHubAppSecretConfig
+type GCPServiceAccountSecretConfig = api.GCPServiceAccountSecretConfig
 
 type Config struct {
 	Server    ServerConfig    `yaml:"server"`
@@ -164,32 +165,8 @@ func (c *Config) Validate() error {
 		}
 	}
 	for _, s := range c.Secrets {
-		switch s.Type {
-		case "env":
-		case "file":
-			if s.File.Path == "" {
-				return fmt.Errorf("secret source 'file' requires path")
-			}
-		case "vault":
-			if s.Vault.Address == "" {
-				return fmt.Errorf("secret source 'vault' requires address")
-			}
-			if s.Vault.Auth != "" && s.Vault.Auth != "token" && s.Vault.Auth != "kubernetes" {
-				return fmt.Errorf("secret source 'vault': auth must be 'token' or 'kubernetes', got %q", s.Vault.Auth)
-			}
-		case "kubernetes":
-		case "github-app":
-			if s.GitHubApp.AppID <= 0 {
-				return fmt.Errorf("secret source 'github-app' requires positive app_id")
-			}
-			if s.GitHubApp.InstallationID <= 0 {
-				return fmt.Errorf("secret source 'github-app' requires positive installation_id")
-			}
-			if s.GitHubApp.PrivateKeyPath == "" {
-				return fmt.Errorf("secret source 'github-app' requires private_key_path")
-			}
-		default:
-			return fmt.Errorf("secret source type %q not supported", s.Type)
+		if err := validateSecret(s); err != nil {
+			return err
 		}
 	}
 	if c.DNS.DoT.Enabled && c.DNS.DoT.Server == "" {

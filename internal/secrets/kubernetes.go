@@ -23,6 +23,7 @@ func init() {
 			Namespace: cfg.Kubernetes.Namespace,
 		})
 	})
+	config.RegisterSecretValidator("kubernetes", nil)
 }
 
 const (

@@ -18,11 +18,12 @@ type InjectConfig struct {
 }
 
 type SecretConfig struct {
-	Type       string                `yaml:"type" json:"type"`
-	File       FileSecretConfig      `yaml:",inline" json:",inline"`
-	Vault      VaultSecretConfig     `yaml:",inline" json:",inline"`
-	Kubernetes K8sSecretConfig       `yaml:",inline" json:",inline"`
-	GitHubApp  GitHubAppSecretConfig `yaml:",inline" json:",inline"`
+	Type              string                        `yaml:"type" json:"type"`
+	File              FileSecretConfig              `yaml:",inline" json:",inline"`
+	Vault             VaultSecretConfig             `yaml:",inline" json:",inline"`
+	Kubernetes        K8sSecretConfig               `yaml:",inline" json:",inline"`
+	GitHubApp         GitHubAppSecretConfig         `yaml:",inline" json:",inline"`
+	GCPServiceAccount GCPServiceAccountSecretConfig `yaml:",inline" json:",inline"`
 }
 
 type FileSecretConfig struct {
@@ -44,6 +45,11 @@ type GitHubAppSecretConfig struct {
 	AppID          int64  `yaml:"app_id,omitempty" json:"appId,omitempty"`
 	InstallationID int64  `yaml:"installation_id,omitempty" json:"installationId,omitempty"`
 	PrivateKeyPath string `yaml:"private_key_path,omitempty" json:"privateKeyPath,omitempty"`
+}
+
+type GCPServiceAccountSecretConfig struct {
+	CredentialsFile string   `yaml:"credentials_file,omitempty" json:"credentialsFile,omitempty"`
+	Scopes          []string `yaml:"scopes,omitempty" json:"scopes,omitempty"`
 }
 
 type TenantConfig struct {

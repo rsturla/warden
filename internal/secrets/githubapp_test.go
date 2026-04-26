@@ -32,6 +32,7 @@ func TestGitHubAppSourceCreateJWT(t *testing.T) {
 		key:            key,
 		client:         &http.Client{},
 		apiBase:        "https://api.github.com",
+		cache:          newTokenCache(5 * time.Minute),
 	}
 
 	jwt, err := src.createJWT()
@@ -110,6 +111,7 @@ func TestGitHubAppSourceTokenExchange(t *testing.T) {
 		key:            key,
 		client:         &http.Client{},
 		apiBase:        srv.URL,
+		cache:          newTokenCache(5 * time.Minute),
 	}
 
 	ctx := context.Background()
@@ -168,6 +170,7 @@ func TestGitHubAppSourceConcurrent(t *testing.T) {
 		key:            key,
 		client:         &http.Client{},
 		apiBase:        srv.URL,
+		cache:          newTokenCache(5 * time.Minute),
 	}
 
 	ctx := context.Background()
@@ -210,8 +213,11 @@ func TestGitHubAppSourceTokenRefresh(t *testing.T) {
 		key:            key,
 		client:         &http.Client{},
 		apiBase:        srv.URL,
-		expiry:         time.Now().Add(-1 * time.Hour),
-		token:          "old_token",
+		cache: &tokenCache{
+			token:  "old_token",
+			expiry: time.Now().Add(-1 * time.Hour),
+			margin: 5 * time.Minute,
+		},
 	}
 
 	val, _, err := src.Resolve(context.Background(), "GITHUB_TOKEN")
@@ -282,54 +288,5 @@ func TestNewGitHubAppSourceMissingKey(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatal("expected error for missing key")
-	}
-}
-
-func TestParseRSAPrivateKeyPKCS1(t *testing.T) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pemData := pem.EncodeToMemory(&pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(key),
-	})
-
-	parsed, err := parseRSAPrivateKey(pemData)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if parsed.N.Cmp(key.N) != 0 {
-		t.Error("key mismatch")
-	}
-}
-
-func TestParseRSAPrivateKeyPKCS8(t *testing.T) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		t.Fatal(err)
-	}
-	der, err := x509.MarshalPKCS8PrivateKey(key)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pemData := pem.EncodeToMemory(&pem.Block{
-		Type:  "PRIVATE KEY",
-		Bytes: der,
-	})
-
-	parsed, err := parseRSAPrivateKey(pemData)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if parsed.N.Cmp(key.N) != 0 {
-		t.Error("key mismatch")
-	}
-}
-
-func TestParseRSAPrivateKeyInvalid(t *testing.T) {
-	_, err := parseRSAPrivateKey([]byte("not pem"))
-	if err == nil {
-		t.Fatal("expected error")
 	}
 }

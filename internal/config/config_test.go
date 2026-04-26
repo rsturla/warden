@@ -1,7 +1,10 @@
-package config
+package config_test
 
 import (
 	"testing"
+
+	"github.com/rsturla/warden/internal/config"
+	_ "github.com/rsturla/warden/internal/secrets"
 )
 
 func TestParseFullConfig(t *testing.T) {
@@ -47,7 +50,7 @@ telemetry:
     endpoint: "http://otel:4317"
 `)
 
-	cfg, err := Parse(data)
+	cfg, err := config.Parse(data)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -85,7 +88,7 @@ func TestParseMinimalConfig(t *testing.T) {
 	data := []byte(`
 policies: []
 `)
-	cfg, err := Parse(data)
+	cfg, err := config.Parse(data)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -114,7 +117,7 @@ policies:
     host: "example.com"
     action: allow
 `)
-	cfg, err := Parse(data)
+	cfg, err := config.Parse(data)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -129,7 +132,7 @@ policies:
   - host: "example.com"
     action: allow
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for missing name")
 	}
@@ -141,7 +144,7 @@ policies:
   - name: test
     action: allow
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for missing host")
 	}
@@ -153,7 +156,7 @@ policies:
   - name: test
     host: "example.com"
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for missing action")
 	}
@@ -166,7 +169,7 @@ policies:
     host: "example.com"
     action: maybe
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for invalid action")
 	}
@@ -182,7 +185,7 @@ policies:
     host: "b.com"
     action: deny
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for duplicate name")
 	}
@@ -198,7 +201,7 @@ policies:
       headers:
         X-Foo: bar
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for deny with inject")
 	}
@@ -212,7 +215,7 @@ policies:
     methods: ["get"]
     action: allow
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for lowercase method")
 	}
@@ -224,7 +227,7 @@ secrets:
   - type: redis
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for unsupported secret type")
 	}
@@ -236,7 +239,7 @@ secrets:
   - type: vault
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for vault secret without address")
 	}
@@ -249,7 +252,7 @@ secrets:
     address: https://vault.example.com:8200
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err != nil {
 		t.Fatalf("valid vault config rejected: %v", err)
 	}
@@ -261,7 +264,7 @@ secrets:
   - type: github-app
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for github-app without required fields")
 	}
@@ -273,7 +276,7 @@ secrets:
   - type: kubernetes
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err != nil {
 		t.Fatalf("kubernetes secret should be valid: %v", err)
 	}
@@ -286,7 +289,7 @@ dns:
     enabled: true
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for dot enabled without server")
 	}
@@ -299,7 +302,7 @@ telemetry:
     enabled: true
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for traces enabled without endpoint")
 	}
@@ -311,7 +314,7 @@ secrets:
   - type: file
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for file secret without path")
 	}
@@ -324,7 +327,7 @@ dns:
     - "not-a-cidr"
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for invalid CIDR")
 	}
@@ -332,7 +335,7 @@ policies: []
 
 func TestValidateEmptyPolicies(t *testing.T) {
 	data := []byte(`policies: []`)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err != nil {
 		t.Fatalf("empty policies should be valid: %v", err)
 	}
@@ -340,21 +343,21 @@ func TestValidateEmptyPolicies(t *testing.T) {
 
 func TestParseInvalidYAML(t *testing.T) {
 	data := []byte(`{{{invalid`)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error for invalid YAML")
 	}
 }
 
 func TestLoadFileNotFound(t *testing.T) {
-	_, err := Load("/nonexistent/path/config.yaml")
+	_, err := config.Load("/nonexistent/path/config.yaml")
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}
 }
 
 func TestLoadValidFile(t *testing.T) {
-	cfg, err := Load("../../config.example.yaml")
+	cfg, err := config.Load("../../config.example.yaml")
 	if err != nil {
 		t.Fatalf("failed to load example config: %v", err)
 	}
@@ -370,7 +373,7 @@ policies:
     host: "example.com"
     action: Allow
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err != nil {
 		t.Fatalf("mixed case action should be accepted: %v", err)
 	}
@@ -384,7 +387,7 @@ dns:
     - "fe80::/10"
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err != nil {
 		t.Fatalf("IPv6 CIDRs should be valid: %v", err)
 	}
@@ -397,7 +400,7 @@ policies:
     host: "api.github.com"
     action: allow
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err != nil {
 		t.Fatalf("special chars in policy name should be valid: %v", err)
 	}
@@ -408,7 +411,7 @@ func TestValidateTenantsRequiresTLS(t *testing.T) {
 tenants:
   dir: /etc/warden/tenants.d
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error: tenants without server.tls")
 	}
@@ -423,7 +426,7 @@ server:
     client_ca: ca.crt
 tenants: {}
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error: tenants without dir")
 	}
@@ -443,7 +446,7 @@ policies:
     host: "example.com"
     action: allow
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error: tenants with root-level policies")
 	}
@@ -461,7 +464,7 @@ tenants:
 secrets:
   - type: env
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error: tenants with root-level secrets")
 	}
@@ -477,7 +480,7 @@ server:
 tenants:
   dir: /etc/warden/tenants.d
 `)
-	cfg, err := Parse(data)
+	cfg, err := config.Parse(data)
 	if err != nil {
 		t.Fatalf("valid tenant config rejected: %v", err)
 	}
@@ -497,7 +500,7 @@ server:
     client_ca: ca.crt
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error: TLS without cert")
 	}
@@ -511,7 +514,7 @@ server:
     client_ca: ca.crt
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error: TLS without key")
 	}
@@ -525,7 +528,7 @@ server:
     key: server.key
 policies: []
 `)
-	_, err := Parse(data)
+	_, err := config.Parse(data)
 	if err == nil {
 		t.Fatal("expected error: TLS without client_ca")
 	}
@@ -539,11 +542,38 @@ policies:
     methods: []
     action: allow
 `)
-	cfg, err := Parse(data)
+	cfg, err := config.Parse(data)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(cfg.Policies[0].Methods) != 0 {
 		t.Error("empty methods should remain empty (match all)")
+	}
+}
+
+func TestValidateGCPServiceAccountValid(t *testing.T) {
+	data := []byte(`
+secrets:
+  - type: gcp-service-account
+policies: []
+`)
+	_, err := config.Parse(data)
+	if err != nil {
+		t.Fatalf("gcp-service-account should be valid: %v", err)
+	}
+}
+
+func TestValidateGCPServiceAccountWithCredentials(t *testing.T) {
+	data := []byte(`
+secrets:
+  - type: gcp-service-account
+    credentials_file: /etc/warden/sa-key.json
+    scopes:
+      - https://www.googleapis.com/auth/cloud-platform
+policies: []
+`)
+	_, err := config.Parse(data)
+	if err != nil {
+		t.Fatalf("gcp-service-account with credentials should be valid: %v", err)
 	}
 }

@@ -74,7 +74,7 @@ lint: fmt vet ## Run all linters
 	staticcheck ./...
 
 fmt: ## Check gofmt formatting
-	@test -z "$$(gofmt -l .)" || { echo "gofmt needed:"; gofmt -l .; exit 1; }
+	@test -z "$$(gofmt -l $$(find . -name '*.go' -not -path './operator/*'))" || { echo "gofmt needed:"; gofmt -l $$(find . -name '*.go' -not -path './operator/*'); exit 1; }
 
 vet: ## Run go vet
 	go vet ./...

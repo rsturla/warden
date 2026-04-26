@@ -121,7 +121,6 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
 
-
 func (m *PodMutator) findWardenProxy(ctx context.Context, namespace string) (*wardenio.WardenProxy, error) {
 	var list wardenio.WardenProxyList
 	if err := m.Client.List(ctx, &list, client.InNamespace(namespace)); err != nil {

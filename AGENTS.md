@@ -27,6 +27,7 @@ make deps-update  # update all deps to latest
 ```
 cmd/warden/              main proxy binary
 cmd/warden-bridge/       vsock-to-TCP bridge for guest VMs
+pkg/api/                 shared types (PolicyRule, SecretConfig, TenantConfig)
 internal/
   ca/                    TLS CA, auto-gen or external, per-host cert cache
   config/                YAML config types, parsing, validation, defaults
@@ -40,6 +41,11 @@ internal/
   telemetry/             TelemetryExporter interface: slog JSON, OTLP/HTTP, multi-exporter
   tenant/                Tenant store interface, per-tenant config, FileStore with hot reload
   version/               version/commit/date vars (injected via ldflags)
+operator/                Kubernetes operator (separate Go module, see operator/CLAUDE.md)
+  api/v1alpha1/          CRD types: Tenant, WardenProxy (wardenproxy.dev/v1alpha1)
+  cmd/operator/          controller-manager entrypoint
+  internal/controller/   reconcilers (Tenant → ConfigMap, WardenProxy → Deployment)
+  internal/webhook/      mutating webhook (injects warden-bridge sidecar)
 ```
 
 ## Key Interfaces
@@ -86,5 +92,7 @@ Full documentation lives in [`docs/`](docs/):
 - [Secrets](docs/secrets.md) — all backend types with examples
 - [Telemetry](docs/telemetry.md) — logs, traces, metrics, OTLP
 - [DNS](docs/dns.md) — resolution, DoT, caching, IP denylist
-- [Deployment](docs/deployment.md) — container, microVM, agent trust
+- [Deployment](docs/deployment.md) — container, microVM, agent trust, operator
 - [Development](docs/development.md) — building, testing, extending
+- [Local Testing](docs/local-testing.md) — kind cluster, Agent Sandbox, e2e tests
+- [Operator](operator/CLAUDE.md) — CRDs, controllers, webhook (separate Go module)

@@ -1,0 +1,45 @@
+apiVersion: agents.x-k8s.io/v1alpha1
+kind: Sandbox
+metadata:
+  name: agent-alpha
+  namespace: agent-sandbox
+spec:
+  podTemplate:
+    metadata:
+      labels:
+        role: agent
+        tenant: alpha
+    spec:
+      volumes:
+        - name: client-cert
+          secret:
+            secretName: agent-alpha-cert
+      containers:
+        - name: agent
+          image: curlimages/curl:latest
+          command: ["sleep", "infinity"]
+          env:
+            - name: HTTP_PROXY
+              value: "http://127.0.0.1:8080"
+            - name: HTTPS_PROXY
+              value: "http://127.0.0.1:8080"
+        - name: bridge
+          image: warden:latest
+          imagePullPolicy: Never
+          command: ["warden-bridge"]
+          args:
+            - "--listen=127.0.0.1:8080"
+            - "--proxy-addr=warden-mt.agent-sandbox.svc:8443"
+            - "--client-cert=/etc/certs/tls.crt"
+            - "--client-key=/etc/certs/tls.key"
+            - "--proxy-ca=/etc/certs/ca.crt"
+          volumeMounts:
+            - name: client-cert
+              mountPath: /etc/certs
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 32Mi

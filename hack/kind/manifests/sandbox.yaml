@@ -1,0 +1,24 @@
+apiVersion: agents.x-k8s.io/v1alpha1
+kind: Sandbox
+metadata:
+  name: test-agent
+  namespace: agent-sandbox
+spec:
+  podTemplate:
+    metadata:
+      labels:
+        role: agent
+    spec:
+      containers:
+        - name: agent
+          image: curlimages/curl:latest
+          command: ["sleep", "infinity"]
+          env:
+            - name: HTTP_PROXY
+              value: "http://warden.agent-sandbox.svc:8080"
+            - name: HTTPS_PROXY
+              value: "http://warden.agent-sandbox.svc:8080"
+            - name: http_proxy
+              value: "http://warden.agent-sandbox.svc:8080"
+            - name: https_proxy
+              value: "http://warden.agent-sandbox.svc:8080"

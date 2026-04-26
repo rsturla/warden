@@ -69,6 +69,13 @@ spec:
                             type: string
                           type: object
                       type: object
+                    intercept:
+                      properties:
+                        credential:
+                          type: string
+                      required:
+                      - credential
+                      type: object
                     methods:
                       items:
                         type: string
@@ -93,6 +100,8 @@ spec:
                       type: integer
                     auth:
                       type: string
+                    credentialsFile:
+                      type: string
                     installationId:
                       format: int64
                       type: integer
@@ -105,6 +114,12 @@ spec:
                     prefix:
                       type: string
                     privateKeyPath:
+                      type: string
+                    scopes:
+                      items:
+                        type: string
+                      type: array
+                    tokenName:
                       type: string
                     type:
                       type: string

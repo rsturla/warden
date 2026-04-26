@@ -365,6 +365,105 @@ PATCH_EOF
   fi
 fi
 
+# ========================================
+# Multi-replica: load balancing + resilience
+# ========================================
+
+info "Test 26: Scale warden-mt to 3 replicas"
+kubectl -n "$NAMESPACE" scale deployment warden-mt --replicas=3
+kubectl -n "$NAMESPACE" rollout status deployment/warden-mt --timeout=120s
+READY_REPLICAS=$(kubectl -n "$NAMESPACE" get deployment warden-mt -o jsonpath='{.status.readyReplicas}')
+if [ "$READY_REPLICAS" = "3" ]; then
+  pass "warden-mt scaled to 3 replicas (readyReplicas=$READY_REPLICAS)"
+else
+  fail "warden-mt readyReplicas=$READY_REPLICAS (expected 3)"
+fi
+
+info "Test 27: Requests succeed with multiple replicas"
+ALL_OK=true
+for i in $(seq 1 10); do
+  CODE=$(mt_curl agent-alpha "$TEST_SERVER/get")
+  if [ "$CODE" != "200" ]; then
+    ALL_OK=false
+    break
+  fi
+done
+if [ "$ALL_OK" = "true" ]; then
+  pass "10 consecutive requests all returned 200"
+else
+  fail "request $i returned $CODE (expected 200)"
+fi
+
+info "Test 28: Multiple replicas serve requests (load balancing)"
+# Send requests and collect responding pod names from Warden logs
+# Clear old logs by noting current log line count
+MT_PODS=$(kubectl -n "$NAMESPACE" get pods -l app=warden-mt -o jsonpath='{.items[*].metadata.name}')
+for i in $(seq 1 20); do
+  mt_curl agent-alpha "$TEST_SERVER/get" >/dev/null
+done
+sleep 2
+RESPONDING_PODS=0
+for POD in $MT_PODS; do
+  LOG_LINES=$(kubectl -n "$NAMESPACE" logs "$POD" --since=10s 2>/dev/null | grep -c '"path":"/get"' || true)
+  if [ "$LOG_LINES" -gt 0 ]; then
+    RESPONDING_PODS=$((RESPONDING_PODS + 1))
+  fi
+done
+if [ "$RESPONDING_PODS" -ge 2 ]; then
+  pass "requests distributed across $RESPONDING_PODS/$( echo $MT_PODS | wc -w) replicas"
+else
+  fail "only $RESPONDING_PODS replica(s) handled requests (expected ≥2)"
+fi
+
+info "Test 29: Secret injection consistent across replicas"
+ALL_INJECTED=true
+for i in $(seq 1 5); do
+  BODY=$(mt_curl_body agent-alpha "$TEST_SERVER/headers")
+  if ! echo "$BODY" | grep -q "alpha-secret-token-99999"; then
+    ALL_INJECTED=false
+    break
+  fi
+done
+if [ "$ALL_INJECTED" = "true" ]; then
+  pass "all 5 requests had correct injected token"
+else
+  fail "token missing on request $i"
+fi
+
+info "Test 30: Kill one replica, requests still succeed (resilience)"
+VICTIM=$(kubectl -n "$NAMESPACE" get pods -l app=warden-mt -o jsonpath='{.items[0].metadata.name}')
+kubectl -n "$NAMESPACE" delete pod "$VICTIM" --grace-period=0 --force 2>/dev/null
+sleep 2
+RESILIENT=true
+for i in $(seq 1 5); do
+  CODE=$(mt_curl agent-alpha "$TEST_SERVER/get")
+  if [ "$CODE" != "200" ]; then
+    RESILIENT=false
+    break
+  fi
+done
+if [ "$RESILIENT" = "true" ]; then
+  pass "5 requests succeeded after killing pod $VICTIM"
+else
+  fail "request $i returned $CODE after killing replica"
+fi
+
+info "Test 31: Scale back to 1, still works"
+kubectl -n "$NAMESPACE" scale deployment warden-mt --replicas=1
+kubectl -n "$NAMESPACE" rollout status deployment/warden-mt --timeout=60s
+# Wait for exactly 1 running pod
+for i in $(seq 1 30); do
+  RUNNING=$(kubectl -n "$NAMESPACE" get pods -l app=warden-mt --field-selector=status.phase=Running -o name 2>/dev/null | wc -l)
+  if [ "$RUNNING" -eq 1 ]; then break; fi
+  sleep 2
+done
+CODE=$(mt_curl agent-alpha "$TEST_SERVER/get")
+if [ "$CODE" = "200" ]; then
+  pass "single replica serves requests after scale-down"
+else
+  fail "single replica returned $CODE (expected 200)"
+fi
+
 # ---- Summary ----
 echo ""
 info "============================================"

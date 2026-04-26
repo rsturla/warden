@@ -37,6 +37,10 @@ func (p *Proxy) handleInterceptConnect(conn net.Conn, req *http.Request, decisio
 	}
 	resp.Header.Set("Content-Type", "application/json")
 	if err := resp.Write(conn); err != nil {
+		p.logDeny(ctx, req, &policy.PolicyDecision{
+			RuleName: decision.RuleName,
+			Reason:   "response_write_failed",
+		}, rt.id, start)
 		return
 	}
 

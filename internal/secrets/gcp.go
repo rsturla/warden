@@ -75,7 +75,7 @@ func NewGCPServiceAccountSource(cfg GCPServiceAccountConfig) (*GCPServiceAccount
 }
 
 func (s *GCPServiceAccountSource) loadCredentials(cfg GCPServiceAccountConfig) error {
-	data, err := os.ReadFile(cfg.CredentialsFile)
+	data, err := os.ReadFile(cfg.CredentialsFile) // #nosec G304 -- path is admin-configured credentials_file from trusted config
 	if err != nil {
 		return fmt.Errorf("reading gcp credentials: %w", err)
 	}
@@ -181,7 +181,7 @@ func (s *GCPServiceAccountSource) metadataToken(ctx context.Context) (string, ti
 }
 
 func doGCPTokenRequest(client *http.Client, req *http.Request) (string, time.Time, error) {
-	resp, err := client.Do(req) // #nosec G704 -- URL constructed from admin-configured credentials file or well-known GCE metadata endpoint
+	resp, err := client.Do(req) // #nosec G107 -- URL constructed from admin-configured credentials file or well-known GCE metadata endpoint
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("gcp token request: %w", err)
 	}

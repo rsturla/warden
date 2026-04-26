@@ -27,6 +27,11 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
+		// Envtest binaries not available — run non-envtest tests only
+		os.Exit(m.Run())
+	}
+
 	crdPaths := filepath.Join("..", "..", "config", "crd", "bases")
 
 	testEnv = &envtest.Environment{
@@ -83,6 +88,13 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+func requireEnvTest(t *testing.T) {
+	t.Helper()
+	if os.Getenv("KUBEBUILDER_ASSETS") == "" {
+		t.Skip("KUBEBUILDER_ASSETS not set, skipping envtest")
+	}
+}
+
 func waitFor(t *testing.T, timeout time.Duration, check func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(timeout)
@@ -96,6 +108,7 @@ func waitFor(t *testing.T, timeout time.Duration, check func() bool) {
 }
 
 func TestEnvTest_TenantReconcile_CreatesConfigMap(t *testing.T) {
+	requireEnvTest(t)
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-tenant-cm"}}
 	if err := testClient.Create(testCtx, ns); err != nil {
 		t.Fatal(err)
@@ -136,6 +149,7 @@ func TestEnvTest_TenantReconcile_CreatesConfigMap(t *testing.T) {
 }
 
 func TestEnvTest_TenantReconcile_UpdatesStatus(t *testing.T) {
+	requireEnvTest(t)
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-tenant-status"}}
 	if err := testClient.Create(testCtx, ns); err != nil {
 		t.Fatal(err)
@@ -175,6 +189,7 @@ func TestEnvTest_TenantReconcile_UpdatesStatus(t *testing.T) {
 }
 
 func TestEnvTest_TenantDelete_RemovesFromConfigMap(t *testing.T) {
+	requireEnvTest(t)
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-tenant-delete"}}
 	if err := testClient.Create(testCtx, ns); err != nil {
 		t.Fatal(err)
@@ -220,6 +235,7 @@ func TestEnvTest_TenantDelete_RemovesFromConfigMap(t *testing.T) {
 }
 
 func TestEnvTest_WardenProxyReconcile_CreatesResources(t *testing.T) {
+	requireEnvTest(t)
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-proxy-create"}}
 	if err := testClient.Create(testCtx, ns); err != nil {
 		t.Fatal(err)
@@ -269,6 +285,7 @@ func TestEnvTest_WardenProxyReconcile_CreatesResources(t *testing.T) {
 }
 
 func TestEnvTest_MultipleTenants_SharedConfigMap(t *testing.T) {
+	requireEnvTest(t)
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test-multi-tenant"}}
 	if err := testClient.Create(testCtx, ns); err != nil {
 		t.Fatal(err)

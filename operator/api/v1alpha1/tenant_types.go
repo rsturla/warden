@@ -20,7 +20,7 @@ type Tenant struct {
 }
 
 type TenantSpec struct {
-	Policies []api.PolicyRule  `json:"policies"`
+	Policies []api.PolicyRule   `json:"policies"`
 	Secrets  []api.SecretConfig `json:"secrets,omitempty"`
 }
 

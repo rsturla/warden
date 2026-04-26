@@ -1,0 +1,12 @@
+FROM registry.access.redhat.com/hi/go:1.26 AS builder
+
+COPY . /src
+WORKDIR /src/operator
+
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /warden-operator ./cmd/operator
+
+FROM registry.access.redhat.com/hi/core-runtime:latest
+
+COPY --from=builder /warden-operator /usr/bin/warden-operator
+
+ENTRYPOINT ["/usr/bin/warden-operator"]

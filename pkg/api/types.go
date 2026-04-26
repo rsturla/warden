@@ -19,10 +19,10 @@ type InjectConfig struct {
 
 type SecretConfig struct {
 	Type       string                `yaml:"type" json:"type"`
-	File       FileSecretConfig      `yaml:",inline"`
-	Vault      VaultSecretConfig     `yaml:",inline"`
-	Kubernetes K8sSecretConfig       `yaml:",inline"`
-	GitHubApp  GitHubAppSecretConfig `yaml:",inline"`
+	File       FileSecretConfig      `yaml:",inline" json:",inline"`
+	Vault      VaultSecretConfig     `yaml:",inline" json:",inline"`
+	Kubernetes K8sSecretConfig       `yaml:",inline" json:",inline"`
+	GitHubApp  GitHubAppSecretConfig `yaml:",inline" json:",inline"`
 }
 
 type FileSecretConfig struct {

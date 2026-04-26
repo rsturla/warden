@@ -289,19 +289,19 @@ func proxyPort(proxy *wardenio.WardenProxy) int32 {
 }
 
 type wardenConfig struct {
-	Server    wardenServerConfig    `yaml:"server"`
-	CA        wardenCAConfig        `yaml:"ca"`
-	DNS       *wardenDNSConfig      `yaml:"dns,omitempty"`
-	Tenants   *wardenTenantsConfig  `yaml:"tenants,omitempty"`
-	Policies  []interface{}         `yaml:"policies,omitempty"`
-	Secrets   []interface{}         `yaml:"secrets,omitempty"`
+	Server    wardenServerConfig     `yaml:"server"`
+	CA        wardenCAConfig         `yaml:"ca"`
+	DNS       *wardenDNSConfig       `yaml:"dns,omitempty"`
+	Tenants   *wardenTenantsConfig   `yaml:"tenants,omitempty"`
+	Policies  []interface{}          `yaml:"policies,omitempty"`
+	Secrets   []interface{}          `yaml:"secrets,omitempty"`
 	Telemetry *wardenTelemetryConfig `yaml:"telemetry,omitempty"`
 }
 
 type wardenServerConfig struct {
-	Listen       string                  `yaml:"listen"`
-	HealthListen string                  `yaml:"health_listen"`
-	TLS          *wardenServerTLSConfig  `yaml:"tls,omitempty"`
+	Listen       string                 `yaml:"listen"`
+	HealthListen string                 `yaml:"health_listen"`
+	TLS          *wardenServerTLSConfig `yaml:"tls,omitempty"`
 }
 
 type wardenServerTLSConfig struct {

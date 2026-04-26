@@ -253,7 +253,7 @@ func TestPodMutator_InjectsBridge(t *testing.T) {
 	patched := applyPatch(t, pod, resp)
 
 	var foundBridge bool
-	for _, c := range patched.Spec.Containers {
+	for _, c := range patched.Spec.InitContainers {
 		if c.Name == bridgeName {
 			foundBridge = true
 			if c.Image != "warden:latest" {
@@ -264,6 +264,9 @@ func TestPodMutator_InjectsBridge(t *testing.T) {
 			}
 			if len(c.VolumeMounts) == 0 {
 				t.Error("bridge has no volume mounts")
+			}
+			if c.RestartPolicy == nil || *c.RestartPolicy != corev1.ContainerRestartPolicyAlways {
+				t.Error("bridge should have RestartPolicy=Always (native sidecar)")
 			}
 		}
 	}
@@ -380,10 +383,8 @@ func TestPodMutator_Idempotent(t *testing.T) {
 			},
 		},
 		Spec: corev1.PodSpec{
-			Containers: []corev1.Container{
-				{Name: "app", Image: "test:latest"},
-				{Name: bridgeName, Image: "warden:latest"},
-			},
+			Containers:     []corev1.Container{{Name: "app", Image: "test:latest"}},
+			InitContainers: []corev1.Container{{Name: bridgeName, Image: "warden:latest"}},
 		},
 	}
 
@@ -491,14 +492,14 @@ func TestPodMutator_MultipleContainers(t *testing.T) {
 	resp := m.Handle(context.Background(), admissionRequest(t, pod, "default"))
 	patched := applyPatch(t, pod, resp)
 
-	if len(patched.Spec.Containers) != 3 {
-		t.Fatalf("expected 3 containers (app1 + app2 + bridge), got %d", len(patched.Spec.Containers))
+	if len(patched.Spec.Containers) != 2 {
+		t.Fatalf("expected 2 containers (app1 + app2), got %d", len(patched.Spec.Containers))
+	}
+	if len(patched.Spec.InitContainers) != 1 || patched.Spec.InitContainers[0].Name != bridgeName {
+		t.Fatalf("expected 1 init container (bridge), got %d", len(patched.Spec.InitContainers))
 	}
 
 	for _, c := range patched.Spec.Containers {
-		if c.Name == bridgeName {
-			continue
-		}
 		var found bool
 		for _, e := range c.Env {
 			if e.Name == "HTTP_PROXY" {

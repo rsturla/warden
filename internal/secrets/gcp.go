@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -41,19 +40,10 @@ type GCPServiceAccountSource struct {
 	client    *http.Client
 	cache     *tokenCache
 	tokenName string
-	credType  string // "service_account", "authorized_user", or "metadata"
-
-	// service_account fields
-	key    *rsa.PrivateKey
-	email  string
-	scopes string
-
-	// authorized_user fields
-	clientID     string
-	clientSecret string
-	refreshTok   string
-
-	tokenURL string
+	key       *rsa.PrivateKey // nil = metadata mode
+	email     string
+	scopes    string
+	tokenURL  string
 }
 
 func NewGCPServiceAccountSource(cfg GCPServiceAccountConfig) (*GCPServiceAccountSource, error) {
@@ -73,7 +63,6 @@ func NewGCPServiceAccountSource(cfg GCPServiceAccountConfig) (*GCPServiceAccount
 			return nil, err
 		}
 	} else {
-		s.credType = "metadata"
 		s.tokenURL = gcpMetadataTokenURL
 	}
 
@@ -91,73 +80,43 @@ func (s *GCPServiceAccountSource) loadCredentials(cfg GCPServiceAccountConfig) e
 	}
 
 	var creds struct {
-		Type         string `json:"type"`
-		ClientEmail  string `json:"client_email"`
-		PrivateKey   string `json:"private_key"`
-		TokenURI     string `json:"token_uri"`
-		ClientID     string `json:"client_id"`
-		ClientSecret string `json:"client_secret"`
-		RefreshToken string `json:"refresh_token"`
+		Type        string `json:"type"`
+		ClientEmail string `json:"client_email"`
+		PrivateKey  string `json:"private_key"`
+		TokenURI    string `json:"token_uri"`
 	}
 	if err := json.Unmarshal(data, &creds); err != nil {
 		return fmt.Errorf("parsing gcp credentials: %w", err)
 	}
 
-	s.tokenURL = creds.TokenURI
-	if s.tokenURL == "" {
-		s.tokenURL = gcpDefaultTokenURL
+	if creds.Type != "service_account" {
+		return fmt.Errorf("gcp credentials type must be 'service_account', got %q", creds.Type)
 	}
-
-	switch creds.Type {
-	case "service_account":
-		return s.loadServiceAccount(creds.ClientEmail, creds.PrivateKey, cfg.Scopes)
-	case "authorized_user":
-		return s.loadAuthorizedUser(creds.ClientID, creds.ClientSecret, creds.RefreshToken)
-	default:
-		return fmt.Errorf("unsupported gcp credentials type %q (expected service_account or authorized_user)", creds.Type)
-	}
-}
-
-func (s *GCPServiceAccountSource) loadServiceAccount(email, privateKey string, scopes []string) error {
-	if email == "" {
+	if creds.ClientEmail == "" {
 		return fmt.Errorf("gcp credentials missing client_email")
 	}
-	if privateKey == "" {
+	if creds.PrivateKey == "" {
 		return fmt.Errorf("gcp credentials missing private_key")
 	}
 
-	key, err := parseRSAPrivateKey([]byte(privateKey))
+	key, err := parseRSAPrivateKey([]byte(creds.PrivateKey))
 	if err != nil {
 		return fmt.Errorf("parsing gcp private key: %w", err)
 	}
 
-	s.credType = "service_account"
 	s.key = key
-	s.email = email
+	s.email = creds.ClientEmail
 
+	scopes := cfg.Scopes
 	if len(scopes) == 0 {
 		scopes = []string{gcpDefaultScope}
 	}
 	s.scopes = strings.Join(scopes, " ")
 
-	return nil
-}
-
-func (s *GCPServiceAccountSource) loadAuthorizedUser(clientID, clientSecret, refreshToken string) error {
-	if clientID == "" {
-		return fmt.Errorf("gcp credentials missing client_id")
+	s.tokenURL = creds.TokenURI
+	if s.tokenURL == "" {
+		s.tokenURL = gcpDefaultTokenURL
 	}
-	if clientSecret == "" {
-		return fmt.Errorf("gcp credentials missing client_secret")
-	}
-	if refreshToken == "" {
-		return fmt.Errorf("gcp credentials missing refresh_token")
-	}
-
-	s.credType = "authorized_user"
-	s.clientID = clientID
-	s.clientSecret = clientSecret
-	s.refreshTok = refreshToken
 
 	return nil
 }
@@ -177,31 +136,10 @@ func (s *GCPServiceAccountSource) Resolve(ctx context.Context, name string) (str
 }
 
 func (s *GCPServiceAccountSource) refreshToken(ctx context.Context) (string, time.Time, error) {
-	switch s.credType {
-	case "service_account":
-		return s.exchangeJWT(ctx)
-	case "authorized_user":
-		return s.exchangeRefreshToken(ctx)
-	default:
+	if s.key == nil {
 		return s.metadataToken(ctx)
 	}
-}
-
-func (s *GCPServiceAccountSource) exchangeRefreshToken(ctx context.Context) (string, time.Time, error) {
-	body := url.Values{
-		"grant_type":    {"refresh_token"},
-		"client_id":     {s.clientID},
-		"client_secret": {s.clientSecret},
-		"refresh_token": {s.refreshTok},
-	}.Encode()
-
-	req, err := http.NewRequestWithContext(ctx, "POST", s.tokenURL, strings.NewReader(body))
-	if err != nil {
-		return "", time.Time{}, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	return s.doTokenRequest(req)
+	return s.exchangeJWT(ctx)
 }
 
 func (s *GCPServiceAccountSource) exchangeJWT(ctx context.Context) (string, time.Time, error) {
@@ -224,7 +162,7 @@ func (s *GCPServiceAccountSource) exchangeJWT(ctx context.Context) (string, time
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	return s.doTokenRequest(req)
+	return doGCPTokenRequest(s.client, req)
 }
 
 func (s *GCPServiceAccountSource) metadataToken(ctx context.Context) (string, time.Time, error) {
@@ -234,11 +172,11 @@ func (s *GCPServiceAccountSource) metadataToken(ctx context.Context) (string, ti
 	}
 	req.Header.Set("Metadata-Flavor", "Google")
 
-	return s.doTokenRequest(req)
+	return doGCPTokenRequest(s.client, req)
 }
 
-func (s *GCPServiceAccountSource) doTokenRequest(req *http.Request) (string, time.Time, error) {
-	resp, err := s.client.Do(req)
+func doGCPTokenRequest(client *http.Client, req *http.Request) (string, time.Time, error) {
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("gcp token request: %w", err)
 	}

@@ -2,12 +2,13 @@ package secrets
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
 )
 
-func TestGCPServiceAccountSourceLiveADC(t *testing.T) {
+func TestGCPAuthorizedUserSourceLiveADC(t *testing.T) {
 	adcPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 	if adcPath == "" {
 		adcPath = os.ExpandEnv("$HOME/.config/gcloud/application_default_credentials.json")
@@ -16,14 +17,24 @@ func TestGCPServiceAccountSourceLiveADC(t *testing.T) {
 		t.Skip("no ADC credentials found, skipping live test")
 	}
 
-	src, err := NewGCPServiceAccountSource(GCPServiceAccountConfig{
+	data, err := os.ReadFile(adcPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var creds struct {
+		Type string `json:"type"`
+	}
+	json.Unmarshal(data, &creds)
+	if creds.Type != "authorized_user" {
+		t.Skipf("ADC is type %q, need authorized_user for this test", creds.Type)
+	}
+
+	src, err := NewGCPAuthorizedUserSource(GCPAuthorizedUserConfig{
 		CredentialsFile: adcPath,
 	})
 	if err != nil {
 		t.Fatalf("creating source: %v", err)
 	}
-
-	t.Logf("credential type: %s", src.credType)
 
 	ctx := context.Background()
 	token, ok, err := src.Resolve(ctx, "GCP_ACCESS_TOKEN")

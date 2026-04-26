@@ -319,9 +319,9 @@ func TestGCPServiceAccountSourceBadJSON(t *testing.T) {
 	}
 }
 
-func TestGCPServiceAccountSourceUnsupportedType(t *testing.T) {
+func TestGCPServiceAccountSourceWrongType(t *testing.T) {
 	keyJSON, _ := json.Marshal(map[string]string{
-		"type": "external_account",
+		"type": "authorized_user",
 	})
 	path := t.TempDir() + "/wrong-type.json"
 	os.WriteFile(path, keyJSON, 0600)
@@ -330,111 +330,7 @@ func TestGCPServiceAccountSourceUnsupportedType(t *testing.T) {
 		CredentialsFile: path,
 	})
 	if err == nil {
-		t.Fatal("expected error for unsupported type")
-	}
-}
-
-func TestGCPServiceAccountSourceAuthorizedUser(t *testing.T) {
-	var calls atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		if r.Method != "POST" {
-			t.Errorf("method = %s, want POST", r.Method)
-		}
-
-		r.ParseForm()
-		if r.Form.Get("grant_type") != "refresh_token" {
-			t.Errorf("grant_type = %q", r.Form.Get("grant_type"))
-		}
-		if r.Form.Get("client_id") != "test-client-id" {
-			t.Errorf("client_id = %q", r.Form.Get("client_id"))
-		}
-		if r.Form.Get("client_secret") != "test-client-secret" {
-			t.Errorf("client_secret = %q", r.Form.Get("client_secret"))
-		}
-		if r.Form.Get("refresh_token") != "test-refresh-token" {
-			t.Errorf("refresh_token = %q", r.Form.Get("refresh_token"))
-		}
-
-		json.NewEncoder(w).Encode(map[string]any{
-			"access_token": "ya29.user_token",
-			"expires_in":   3599,
-			"token_type":   "Bearer",
-		})
-	}))
-	defer srv.Close()
-
-	credJSON, _ := json.Marshal(map[string]string{
-		"type":          "authorized_user",
-		"client_id":     "test-client-id",
-		"client_secret": "test-client-secret",
-		"refresh_token": "test-refresh-token",
-	})
-	path := t.TempDir() + "/adc.json"
-	os.WriteFile(path, credJSON, 0600)
-
-	src, err := NewGCPServiceAccountSource(GCPServiceAccountConfig{
-		CredentialsFile: path,
-		TokenURL:        srv.URL,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	ctx := context.Background()
-
-	val, ok, err := src.Resolve(ctx, "GCP_ACCESS_TOKEN")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok {
-		t.Fatal("expected ok")
-	}
-	if val != "ya29.user_token" {
-		t.Errorf("got %q", val)
-	}
-
-	// Second call should use cache
-	val2, ok2, err := src.Resolve(ctx, "GCP_ACCESS_TOKEN")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !ok2 || val2 != "ya29.user_token" {
-		t.Error("cached value mismatch")
-	}
-	if calls.Load() != 1 {
-		t.Errorf("expected 1 HTTP call, got %d", calls.Load())
-	}
-}
-
-func TestGCPServiceAccountSourceAuthorizedUserMissingFields(t *testing.T) {
-	tests := []struct {
-		name string
-		cred map[string]string
-	}{
-		{"missing client_id", map[string]string{
-			"type": "authorized_user", "client_secret": "s", "refresh_token": "r",
-		}},
-		{"missing client_secret", map[string]string{
-			"type": "authorized_user", "client_id": "c", "refresh_token": "r",
-		}},
-		{"missing refresh_token", map[string]string{
-			"type": "authorized_user", "client_id": "c", "client_secret": "s",
-		}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			credJSON, _ := json.Marshal(tt.cred)
-			path := t.TempDir() + "/bad.json"
-			os.WriteFile(path, credJSON, 0600)
-
-			_, err := NewGCPServiceAccountSource(GCPServiceAccountConfig{
-				CredentialsFile: path,
-			})
-			if err == nil {
-				t.Fatal("expected error")
-			}
-		})
+		t.Fatal("expected error for wrong type")
 	}
 }
 

@@ -78,10 +78,31 @@ info "Waiting for test server to be ready"
 kubectl wait --for=condition=Ready pod -l app=test-server \
   -n agent-sandbox --timeout=120s
 
-# Deploy multi-tenant Warden
-info "Generating mTLS certificates"
-"$SCRIPT_DIR/generate-certs.sh"
+# Install cert-manager for mTLS certificate provisioning
+if ! kubectl get namespace cert-manager &>/dev/null; then
+  info "Installing cert-manager"
+  kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.17.2/cert-manager.yaml
 
+  info "Waiting for cert-manager"
+  kubectl wait --for=condition=Available deployment --all \
+    -n cert-manager --timeout=180s
+  kubectl wait --for=condition=Ready pods --all \
+    -n cert-manager --timeout=180s
+else
+  info "cert-manager already installed, skipping"
+fi
+
+# Provision mTLS certificates via cert-manager
+info "Creating certificate resources"
+kubectl apply -f "$SCRIPT_DIR/manifests/certificates.yaml"
+
+info "Waiting for certificates to be issued"
+for CERT in tenant-ca mitm-ca warden-mt-server agent-alpha-cert agent-beta-cert; do
+  kubectl wait --for=condition=Ready certificate "$CERT" \
+    -n agent-sandbox --timeout=120s
+done
+
+# Deploy multi-tenant Warden
 info "Deploying multi-tenant Warden"
 kubectl apply -f "$SCRIPT_DIR/manifests/warden-mt-config.yaml"
 kubectl apply -f "$SCRIPT_DIR/manifests/warden-mt-deployment.yaml"

@@ -28,10 +28,18 @@ spec:
             secretName: warden-mt-server-tls
         - name: tenant-ca
           secret:
-            secretName: warden-mt-tenant-ca
+            secretName: tenant-ca-keypair
+            items:
+              - key: tls.crt
+                path: ca.crt
         - name: mitm-ca
           secret:
             secretName: warden-mt-mitm-ca
+            items:
+              - key: tls.crt
+                path: ca.crt
+              - key: tls.key
+                path: ca.key
       containers:
         - name: warden
           image: warden:latest

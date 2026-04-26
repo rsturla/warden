@@ -250,6 +250,32 @@ func TestCanMatchHost(t *testing.T) {
 	}
 }
 
+func TestAllowWithIntercept(t *testing.T) {
+	e := testEngine(t, []config.PolicyRule{
+		{
+			Name: "intercept-gcp", Host: "oauth2.googleapis.com", Path: "/token",
+			Methods: []string{"POST"}, Action: "allow",
+			Intercept: &config.InterceptConfig{Credential: "GCP_ACCESS_TOKEN"},
+		},
+	})
+
+	d, _ := e.Evaluate(context.Background(), &RequestContext{
+		Host: "oauth2.googleapis.com", Path: "/token", Method: "POST",
+	})
+	if !d.Allowed {
+		t.Fatal("should be allowed")
+	}
+	if d.Intercept == nil {
+		t.Fatal("intercept should not be nil")
+	}
+	if d.Intercept.Credential != "GCP_ACCESS_TOKEN" {
+		t.Errorf("credential = %q", d.Intercept.Credential)
+	}
+	if d.Inject != nil {
+		t.Error("inject should be nil when intercept is set")
+	}
+}
+
 func TestCanMatchHostNoPolicies(t *testing.T) {
 	e := testEngine(t, nil)
 	if e.CanMatchHost("anything.com") {

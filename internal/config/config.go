@@ -18,6 +18,7 @@ type FileSecretConfig = api.FileSecretConfig
 type VaultSecretConfig = api.VaultSecretConfig
 type K8sSecretConfig = api.K8sSecretConfig
 type GitHubAppSecretConfig = api.GitHubAppSecretConfig
+type InterceptConfig = api.InterceptConfig
 type GCPServiceAccountSecretConfig = api.GCPServiceAccountSecretConfig
 
 type Config struct {
@@ -157,6 +158,15 @@ func (c *Config) Validate() error {
 		}
 		if action == "deny" && p.Inject != nil {
 			return fmt.Errorf("policy %q: deny rules cannot have inject", p.Name)
+		}
+		if action == "deny" && p.Intercept != nil {
+			return fmt.Errorf("policy %q: deny rules cannot have intercept", p.Name)
+		}
+		if p.Inject != nil && p.Intercept != nil {
+			return fmt.Errorf("policy %q: inject and intercept are mutually exclusive", p.Name)
+		}
+		if p.Intercept != nil && p.Intercept.Credential == "" {
+			return fmt.Errorf("policy %q: intercept requires credential", p.Name)
 		}
 		for _, m := range p.Methods {
 			if m != strings.ToUpper(m) {

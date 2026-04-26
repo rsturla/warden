@@ -551,6 +551,70 @@ policies:
 	}
 }
 
+func TestValidateInterceptValid(t *testing.T) {
+	data := []byte(`
+policies:
+  - name: intercept-gcp
+    host: "oauth2.googleapis.com"
+    path: "/token"
+    methods: ["POST"]
+    action: allow
+    intercept:
+      credential: GCP_ACCESS_TOKEN
+`)
+	_, err := config.Parse(data)
+	if err != nil {
+		t.Fatalf("valid intercept rejected: %v", err)
+	}
+}
+
+func TestValidateInterceptDenyFails(t *testing.T) {
+	data := []byte(`
+policies:
+  - name: test
+    host: "example.com"
+    action: deny
+    intercept:
+      credential: TOKEN
+`)
+	_, err := config.Parse(data)
+	if err == nil {
+		t.Fatal("expected error for deny with intercept")
+	}
+}
+
+func TestValidateInterceptAndInjectFails(t *testing.T) {
+	data := []byte(`
+policies:
+  - name: test
+    host: "example.com"
+    action: allow
+    inject:
+      headers:
+        X-Foo: bar
+    intercept:
+      credential: TOKEN
+`)
+	_, err := config.Parse(data)
+	if err == nil {
+		t.Fatal("expected error for inject + intercept")
+	}
+}
+
+func TestValidateInterceptMissingCredential(t *testing.T) {
+	data := []byte(`
+policies:
+  - name: test
+    host: "example.com"
+    action: allow
+    intercept: {}
+`)
+	_, err := config.Parse(data)
+	if err == nil {
+		t.Fatal("expected error for intercept without credential")
+	}
+}
+
 func TestValidateGCPServiceAccountValid(t *testing.T) {
 	data := []byte(`
 secrets:

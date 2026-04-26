@@ -4,17 +4,22 @@
 package api
 
 type PolicyRule struct {
-	Name    string        `yaml:"name" json:"name"`
-	Host    string        `yaml:"host" json:"host"`
-	Path    string        `yaml:"path,omitempty" json:"path,omitempty"`
-	Methods []string      `yaml:"methods,omitempty" json:"methods,omitempty"`
-	Action  string        `yaml:"action" json:"action"`
-	Inject  *InjectConfig `yaml:"inject,omitempty" json:"inject,omitempty"`
+	Name      string           `yaml:"name" json:"name"`
+	Host      string           `yaml:"host" json:"host"`
+	Path      string           `yaml:"path,omitempty" json:"path,omitempty"`
+	Methods   []string         `yaml:"methods,omitempty" json:"methods,omitempty"`
+	Action    string           `yaml:"action" json:"action"`
+	Inject    *InjectConfig    `yaml:"inject,omitempty" json:"inject,omitempty"`
+	Intercept *InterceptConfig `yaml:"intercept,omitempty" json:"intercept,omitempty"`
 }
 
 type InjectConfig struct {
 	Headers map[string]string `yaml:"headers,omitempty" json:"headers,omitempty"`
 	Query   map[string]string `yaml:"query,omitempty" json:"query,omitempty"`
+}
+
+type InterceptConfig struct {
+	Credential string `yaml:"credential" json:"credential"`
 }
 
 type SecretConfig struct {

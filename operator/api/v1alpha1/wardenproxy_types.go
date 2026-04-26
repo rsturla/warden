@@ -41,6 +41,13 @@ type WardenProxySpec struct {
 	// Telemetry configuration
 	// +optional
 	Telemetry *TelemetrySpec `json:"telemetry,omitempty"`
+	// ExtraVolumes are additional volumes to mount on the proxy pod.
+	// Use this to provide credential files referenced by tenant secret backends.
+	// +optional
+	ExtraVolumes []corev1.Volume `json:"extraVolumes,omitempty"`
+	// ExtraVolumeMounts are additional volume mounts for the proxy container.
+	// +optional
+	ExtraVolumeMounts []corev1.VolumeMount `json:"extraVolumeMounts,omitempty"`
 	// Policies for single-tenant mode (mutually exclusive with MultiTenant)
 	// +optional
 	Policies []api.PolicyRule `json:"policies,omitempty"`

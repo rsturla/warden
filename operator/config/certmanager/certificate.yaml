@@ -14,8 +14,8 @@ metadata:
 spec:
   secretName: warden-operator-webhook-tls
   dnsNames:
-    - warden-operator-webhook.$(NAMESPACE).svc
-    - warden-operator-webhook.$(NAMESPACE).svc.cluster.local
+    - CERTIFICATE_SERVICE.CERTIFICATE_NAMESPACE.svc
+    - CERTIFICATE_SERVICE.CERTIFICATE_NAMESPACE.svc.cluster.local
   issuerRef:
     name: warden-operator-selfsigned
   privateKey:

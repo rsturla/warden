@@ -27,6 +27,30 @@ replacements:
         options:
           delimiter: /
           index: 0
+      - select:
+          kind: Certificate
+          name: warden-operator-webhook
+        fieldPaths:
+          - .spec.dnsNames.0
+          - .spec.dnsNames.1
+        options:
+          delimiter: .
+          index: 1
+  - source:
+      kind: Service
+      version: v1
+      name: warden-operator-webhook
+      fieldPath: .metadata.name
+    targets:
+      - select:
+          kind: Certificate
+          name: warden-operator-webhook
+        fieldPaths:
+          - .spec.dnsNames.0
+          - .spec.dnsNames.1
+        options:
+          delimiter: .
+          index: 0
   - source:
       kind: Certificate
       group: cert-manager.io
@@ -41,3 +65,15 @@ replacements:
         options:
           delimiter: /
           index: 1
+  - source:
+      kind: Issuer
+      group: cert-manager.io
+      version: v1
+      name: warden-operator-selfsigned
+      fieldPath: .metadata.name
+    targets:
+      - select:
+          kind: Certificate
+          name: warden-operator-webhook
+        fieldPaths:
+          - .spec.issuerRef.name

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
@@ -31,6 +33,8 @@ type WardenProxyReconciler struct {
 // +kubebuilder:rbac:groups="",resources=services,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=networking.k8s.io,resources=networkpolicies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cert-manager.io,resources=certificates,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=cert-manager.io,resources=issuers,verbs=get;list;watch;create;update;patch;delete
 
 func (r *WardenProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -42,6 +46,11 @@ func (r *WardenProxyReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 
 	if err := r.reconcileConfig(ctx, &proxy); err != nil {
 		logger.Error(err, "config reconcile failed")
+		return ctrl.Result{}, err
+	}
+
+	if err := r.reconcileCertificates(ctx, &proxy); err != nil {
+		logger.Error(err, "certificate reconcile failed")
 		return ctrl.Result{}, err
 	}
 
@@ -89,6 +98,125 @@ func (r *WardenProxyReconciler) reconcileConfig(ctx context.Context, proxy *ward
 	return r.createOrUpdateConfigMap(ctx, proxy, cmName, map[string]string{
 		"config.yaml": string(data),
 	})
+}
+
+func (r *WardenProxyReconciler) reconcileCertificates(ctx context.Context, proxy *wardenio.WardenProxy) error {
+	if proxy.Spec.MultiTenant == nil {
+		return nil
+	}
+
+	issuerRef := cmmeta.ObjectReference{
+		Name: proxy.Spec.MultiTenant.CertificateIssuerRef.Name,
+		Kind: proxy.Spec.MultiTenant.CertificateIssuerRef.Kind,
+	}
+	if issuerRef.Kind == "" {
+		issuerRef.Kind = "Issuer"
+	}
+	name := proxy.Name
+	ns := proxy.Namespace
+
+	// tenant-ca and server-tls must be signed by the same CA so the bridge
+	// can verify the proxy with the ca.crt from its tenant cert Secret.
+	// We create the tenant-ca first, then an Issuer from it, and sign
+	// both server-tls and tenant certs with that Issuer.
+	tenantCA := &certmanagerv1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{Name: name + "-tenant-ca", Namespace: ns},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, tenantCA, func() error {
+		if err := controllerutil.SetControllerReference(proxy, tenantCA, r.Scheme); err != nil {
+			return err
+		}
+		tenantCA.Spec = certmanagerv1.CertificateSpec{
+			SecretName: name + "-tenant-ca",
+			IssuerRef:  issuerRef,
+			CommonName: name + "-tenant-ca",
+			IsCA:       true,
+			Usages:     []certmanagerv1.KeyUsage{certmanagerv1.UsageCertSign},
+			PrivateKey: &certmanagerv1.CertificatePrivateKey{
+				Algorithm: certmanagerv1.ECDSAKeyAlgorithm,
+				Size:      256,
+			},
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("tenant-ca certificate: %w", err)
+	}
+
+	tenantIssuer := &certmanagerv1.Issuer{
+		ObjectMeta: metav1.ObjectMeta{Name: name + "-tenant-issuer", Namespace: ns},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, tenantIssuer, func() error {
+		if err := controllerutil.SetControllerReference(proxy, tenantIssuer, r.Scheme); err != nil {
+			return err
+		}
+		tenantIssuer.Spec = certmanagerv1.IssuerSpec{
+			IssuerConfig: certmanagerv1.IssuerConfig{
+				CA: &certmanagerv1.CAIssuer{
+					SecretName: name + "-tenant-ca",
+				},
+			},
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("tenant-issuer: %w", err)
+	}
+
+	tenantIssuerRef := cmmeta.ObjectReference{
+		Name: name + "-tenant-issuer",
+		Kind: "Issuer",
+	}
+
+	serverTLS := &certmanagerv1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{Name: name + "-server-tls", Namespace: ns},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, serverTLS, func() error {
+		if err := controllerutil.SetControllerReference(proxy, serverTLS, r.Scheme); err != nil {
+			return err
+		}
+		serverTLS.Spec = certmanagerv1.CertificateSpec{
+			SecretName: name + "-server-tls",
+			IssuerRef:  tenantIssuerRef,
+			DNSNames: []string{
+				name,
+				name + "." + ns,
+				name + "." + ns + ".svc",
+				name + "." + ns + ".svc.cluster.local",
+			},
+			Usages: []certmanagerv1.KeyUsage{certmanagerv1.UsageServerAuth},
+			PrivateKey: &certmanagerv1.CertificatePrivateKey{
+				Algorithm: certmanagerv1.ECDSAKeyAlgorithm,
+				Size:      256,
+			},
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("server-tls certificate: %w", err)
+	}
+
+	mitmCA := &certmanagerv1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{Name: name + "-mitm-ca", Namespace: ns},
+	}
+	if _, err := controllerutil.CreateOrUpdate(ctx, r.Client, mitmCA, func() error {
+		if err := controllerutil.SetControllerReference(proxy, mitmCA, r.Scheme); err != nil {
+			return err
+		}
+		mitmCA.Spec = certmanagerv1.CertificateSpec{
+			SecretName: name + "-mitm-ca",
+			IssuerRef:  issuerRef,
+			CommonName: name + "-mitm-ca",
+			IsCA:       true,
+			Usages:     []certmanagerv1.KeyUsage{certmanagerv1.UsageCertSign},
+			PrivateKey: &certmanagerv1.CertificatePrivateKey{
+				Algorithm: certmanagerv1.ECDSAKeyAlgorithm,
+				Size:      256,
+			},
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("mitm-ca certificate: %w", err)
+	}
+
+	return nil
 }
 
 func (r *WardenProxyReconciler) reconcileDeployment(ctx context.Context, proxy *wardenio.WardenProxy) error {
@@ -140,6 +268,9 @@ func (r *WardenProxyReconciler) reconcileDeployment(ctx context.Context, proxy *
 			corev1.VolumeMount{Name: "mitm-ca", MountPath: "/etc/warden/mitm"},
 		)
 	}
+
+	volumes = append(volumes, proxy.Spec.ExtraVolumes...)
+	mounts = append(mounts, proxy.Spec.ExtraVolumeMounts...)
 
 	deploy := &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: proxy.Namespace},
@@ -278,6 +409,7 @@ func (r *WardenProxyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&networkingv1.NetworkPolicy{}).
+		Owns(&certmanagerv1.Certificate{}).
 		Complete(r)
 }
 

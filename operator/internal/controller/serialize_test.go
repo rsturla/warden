@@ -31,13 +31,10 @@ func TestSerializeTenantConfig_RoundTrip(t *testing.T) {
 					Action: "deny",
 				},
 			},
-			Secrets: []api.SecretConfig{
-				{Type: "env"},
-			},
 		},
 	}
 
-	yamlStr, err := serializeTenantConfig(tenantCR)
+	yamlStr, err := serializeTenantConfigWithSecrets(tenantCR, []map[string]any{{"type": "env"}})
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -90,7 +87,7 @@ func TestSerializeTenantConfig_EmptySecrets(t *testing.T) {
 		},
 	}
 
-	yamlStr, err := serializeTenantConfig(tenantCR)
+	yamlStr, err := serializeTenantConfigWithSecrets(tenantCR, nil)
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -112,20 +109,17 @@ func TestSerializeTenantConfig_VaultSecret(t *testing.T) {
 			Policies: []api.PolicyRule{
 				{Name: "allow", Host: "api.example.com", Action: "allow"},
 			},
-			Secrets: []api.SecretConfig{
-				{
-					Type: "vault",
-					Vault: api.VaultSecretConfig{
-						Address: "https://vault.example.com",
-						Mount:   "secret",
-						Auth:    "kubernetes",
-					},
-				},
-			},
 		},
 	}
 
-	yamlStr, err := serializeTenantConfig(tenantCR)
+	rawSecrets := []map[string]any{{
+		"type":    "vault",
+		"address": "https://vault.example.com",
+		"mount":   "secret",
+		"auth":    "kubernetes",
+	}}
+
+	yamlStr, err := serializeTenantConfigWithSecrets(tenantCR, rawSecrets)
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -160,11 +154,10 @@ func TestSerializeTenantConfig_InjectQuery(t *testing.T) {
 					},
 				},
 			},
-			Secrets: []api.SecretConfig{{Type: "env"}},
 		},
 	}
 
-	yamlStr, err := serializeTenantConfig(tenantCR)
+	yamlStr, err := serializeTenantConfigWithSecrets(tenantCR, []map[string]any{{"type": "env"}})
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -206,19 +199,16 @@ func TestSerializeTenantConfig_Intercept(t *testing.T) {
 					},
 				},
 			},
-			Secrets: []api.SecretConfig{
-				{
-					Type: "gcp-service-account",
-					GCP: api.GCPSecretConfig{
-						CredentialsFile: "/etc/warden/sa-key.json",
-						TokenName:       "GCP_ACCESS_TOKEN",
-					},
-				},
-			},
 		},
 	}
 
-	yamlStr, err := serializeTenantConfig(tenantCR)
+	rawSecrets := []map[string]any{{
+		"type":             "gcp-service-account",
+		"credentials_file": "/etc/warden/sa-key.json",
+		"token_name":       "GCP_ACCESS_TOKEN",
+	}}
+
+	yamlStr, err := serializeTenantConfigWithSecrets(tenantCR, rawSecrets)
 	if err != nil {
 		t.Fatalf("serialize: %v", err)
 	}
@@ -286,11 +276,12 @@ func FuzzSerializeTenantConfig(f *testing.F) {
 			},
 		}
 
+		var rawSecrets []map[string]any
 		if secretType == "env" || secretType == "file" || secretType == "vault" || secretType == "kubernetes" || secretType == "gcp-service-account" || secretType == "gcp-authorized-user" {
-			tenantCR.Spec.Secrets = []api.SecretConfig{{Type: secretType}}
+			rawSecrets = []map[string]any{{"type": secretType}}
 		}
 
-		yamlStr, err := serializeTenantConfig(tenantCR)
+		yamlStr, err := serializeTenantConfigWithSecrets(tenantCR, rawSecrets)
 		if err != nil {
 			return
 		}

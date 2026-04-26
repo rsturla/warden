@@ -409,7 +409,6 @@ func (r *WardenProxyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Owns(&corev1.Service{}).
 		Owns(&corev1.ConfigMap{}).
 		Owns(&networkingv1.NetworkPolicy{}).
-		Owns(&certmanagerv1.Certificate{}).
 		Complete(r)
 }
 

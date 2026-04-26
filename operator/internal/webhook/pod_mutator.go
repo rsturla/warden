@@ -93,12 +93,10 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 		},
 	})
 
-	restartAlways := corev1.ContainerRestartPolicyAlways
-	pod.Spec.InitContainers = append(pod.Spec.InitContainers, corev1.Container{
-		Name:          bridgeName,
-		Image:         proxy.Spec.Image,
-		RestartPolicy: &restartAlways,
-		Command:       []string{"warden-bridge"},
+	pod.Spec.Containers = append(pod.Spec.Containers, corev1.Container{
+		Name:    bridgeName,
+		Image:   proxy.Spec.Image,
+		Command: []string{"warden-bridge"},
 		Args: []string{
 			"--listen=127.0.0.1:8080",
 			"--proxy-addr=" + proxyAddr,
@@ -149,11 +147,6 @@ func (m *PodMutator) findWardenProxy(ctx context.Context, namespace string) (*wa
 }
 
 func hasBridgeContainer(pod *corev1.Pod) bool {
-	for _, c := range pod.Spec.InitContainers {
-		if c.Name == bridgeName {
-			return true
-		}
-	}
 	for _, c := range pod.Spec.Containers {
 		if c.Name == bridgeName {
 			return true

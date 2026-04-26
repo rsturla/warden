@@ -237,6 +237,17 @@ func (r *TenantReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func serializeTenantConfig(ctx context.Context, c client.Client, tenant *wardenio.Tenant) (string, error) {
+	// The CRD uses json:",inline" for secret sub-configs, but controller-runtime's
+	// strict decoder doesn't populate inline fields. Extract secrets from the raw
+	// tenant JSON instead of relying on Go struct deserialization.
+	rawSecrets, err := extractRawSecrets(ctx, c, tenant)
+	if err != nil {
+		return "", fmt.Errorf("extracting secrets: %w", err)
+	}
+	return serializeTenantConfigWithSecrets(tenant, rawSecrets)
+}
+
+func serializeTenantConfigWithSecrets(tenant *wardenio.Tenant, rawSecrets []map[string]any) (string, error) {
 	policies := make([]api.PolicyRule, len(tenant.Spec.Policies))
 	copy(policies, tenant.Spec.Policies)
 	for i := range policies {
@@ -253,14 +264,6 @@ func serializeTenantConfig(ctx context.Context, c client.Client, tenant *wardeni
 		if policies[i].Host == "" {
 			return "", fmt.Errorf("policy %q: host is empty after sanitization", policies[i].Name)
 		}
-	}
-
-	// The CRD uses json:",inline" for secret sub-configs, but controller-runtime's
-	// strict decoder doesn't populate inline fields. Extract secrets from the raw
-	// tenant JSON instead of relying on Go struct deserialization.
-	rawSecrets, err := extractRawSecrets(ctx, c, tenant)
-	if err != nil {
-		return "", fmt.Errorf("extracting secrets: %w", err)
 	}
 
 	tc := map[string]any{

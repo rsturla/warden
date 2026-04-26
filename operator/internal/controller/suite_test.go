@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -44,6 +45,10 @@ func TestMain(m *testing.M) {
 	}
 
 	if err := wardenio.AddToScheme(scheme.Scheme); err != nil {
+		panic(err)
+	}
+
+	if err := certmanagerv1.AddToScheme(scheme.Scheme); err != nil {
 		panic(err)
 	}
 

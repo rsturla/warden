@@ -63,7 +63,7 @@ fuzz: ## Run all fuzz targets (FUZZ_TIME=30s), auto-discovered
 		pkg=$$(dirname "$$file"); \
 		grep -o '^func Fuzz[A-Za-z0-9_]*' "$$file" | sed 's/^func //' | while read target; do \
 			echo "=== FUZZ $$target ($$pkg) ==="; \
-			go test -fuzz="$$target" -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) "./$$pkg/" || exit 1; \
+			go test -fuzz="$$target" -fuzztime=$(FUZZ_TIME) -parallel=$(FUZZ_PARALLEL) -timeout=0 "./$$pkg/" || exit 1; \
 		done || exit 1; \
 	done
 

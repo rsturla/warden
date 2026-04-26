@@ -34,7 +34,7 @@ fuzz: ## Run fuzz tests (FUZZ_TIME=30s default)
 		FUNCS=$$(grep -oP 'func (Fuzz\w+)' $$f | awk '{print $$2}'); \
 		for fn in $$FUNCS; do \
 			echo "==> Fuzzing $$fn in $$PKG ($${FUZZ_TIME:-30s})"; \
-			go test $$PKG -fuzz=$$fn -fuzztime=$${FUZZ_TIME:-30s} || exit 1; \
+			go test $$PKG -fuzz=$$fn -fuzztime=$${FUZZ_TIME:-30s} -timeout=0 || exit 1; \
 		done; \
 	done
 

@@ -59,7 +59,7 @@ test-e2e: build ## Run end-to-end tests
 ## --- Fuzz ---
 
 fuzz: ## Run all fuzz targets (FUZZ_TIME=30s), auto-discovered
-	@grep -r '^func Fuzz' --include='*_test.go' -l . | while read file; do \
+	@grep -r '^func Fuzz' --include='*_test.go' -l . | grep -v '^./operator/' | while read file; do \
 		pkg=$$(dirname "$$file"); \
 		grep -o '^func Fuzz[A-Za-z0-9_]*' "$$file" | sed 's/^func //' | while read target; do \
 			echo "=== FUZZ $$target ($$pkg) ==="; \

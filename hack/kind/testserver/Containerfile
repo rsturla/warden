@@ -1,4 +1,4 @@
-FROM registry.access.redhat.com/hi/go:1.26 AS builder
+FROM registry.access.redhat.com/hi/go:1.26@sha256:8ccab2865d1405c0c234deab78686033526e42270e8e51e3604ca6db7f6576dd AS builder
 COPY . /src
 WORKDIR /src
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /testserver .

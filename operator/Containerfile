@@ -5,7 +5,7 @@ WORKDIR /src/operator
 
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /warden-operator ./cmd/operator
 
-FROM registry.access.redhat.com/hi/core-runtime:latest
+FROM registry.access.redhat.com/hi/core-runtime:latest@sha256:bc8e5631123ec3c888f13e0dc469424845cb660331acc9b731a0df94bb2bfcd9
 
 COPY --from=builder /warden-operator /usr/bin/warden-operator
 

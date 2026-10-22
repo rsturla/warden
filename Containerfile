@@ -20,7 +20,7 @@ RUN go build -trimpath \
       -X github.com/rsturla/warden/internal/version.Date=${DATE}" \
     -o /warden-bridge ./cmd/warden-bridge
 
-FROM registry.access.redhat.com/hi/core-runtime:latest
+FROM registry.access.redhat.com/hi/core-runtime:latest@sha256:329ff8f46fe69f036b96c3463272aa778a6df6a4f7570f080fd248a414652b6e
 
 COPY --from=builder /warden /usr/bin/warden
 COPY --from=builder /warden-bridge /usr/bin/warden-bridge
